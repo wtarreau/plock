@@ -1,6 +1,19 @@
 #ifndef ATOMIC_OPS_H
 #define ATOMIC_OPS_H
 
+
+static inline void cpu_relax()
+{
+	asm volatile("rep;nop\n" ::: "memory");
+}
+
+static inline void cpu_relax_long(unsigned int cycles)
+{
+	do {
+		cpu_relax();
+	} while (--cycles);
+}
+
 /* increment value and return non-zero if result is non-null */
 static inline unsigned char atomic_inc(volatile unsigned int *ptr)
 {
