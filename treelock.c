@@ -58,7 +58,7 @@ void oneatwork(int thr)
 	}
 
 	/* step 1 : waiting for signal to start */
-	atomic_inc(&actthreads);
+	atomic_inc_noret(&actthreads);
 	while (step == 1);
 
 	/* step 2 : running */
@@ -92,7 +92,7 @@ void oneatwork(int thr)
 			}
 		}
 	}
-	atomic_dec(&actthreads);
+	atomic_dec_noret(&actthreads);
 	//fprintf(stderr, "actthreads=%d\n", actthreads);
 	pthread_exit(0);
 }
@@ -161,12 +161,12 @@ int main(int argc, char **argv)
 		pthread_detach(thr[u]);
 	}
 	
-	atomic_inc(&step);  /* let the threads warm up and get ready to start */
+	atomic_inc_noret(&step);  /* let the threads warm up and get ready to start */
 
 	while (actthreads != nbthreads);
 
 	gettimeofday(&start, NULL);
-	atomic_inc(&step); /* fire ! */
+	atomic_inc_noret(&step); /* fire ! */
 
 	while (actthreads)
 		usleep(100000);
