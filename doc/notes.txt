@@ -43,6 +43,35 @@ The compatiblity matrix looks like this for any two threads :
            -----+----+----+----+-----
 
 
+Note: it's still hard to find short names which unambiguously match the various
+      use cases :
+        - the read-only access may be qualified as "Shared Read", "Read Only",
+          "Shared Access", "Read Lookup", "Read Traversal", "Read Lock" ;
+
+        - the upgradable shared access may be qualified as "Write Traversal",
+          "Write Lookup", "Write Request", "Shared Write", "Pending Write",
+          "Write Intent", "Partially Locked", "Read Modify", "Modify Access",
+          "Limited Access", "Reserved Access" ;
+
+        - the exclusive write access may be qualified as "Exclusive Write",
+          "Write Commit", "Write Access", "Exclusive Access", "Write Lock" ;
+
+It could also be easier to consider states 0 to 3 for unlocked to exclusively
+locked.
+
+In practice, it is useful to understand all states including the transient ones
+as shown below :
+
+    W   M   R   State
+  ----+---+---+------------
+    0 | 0 | 0 | Unlocked
+    0 | 0 |>0 | Shared access
+    0 | 1 |>1 | Limited access
+    0 |>1 | X | Limited access, conflict (transient)
+    1 | 1 |>1 | Exclusive access requested
+    1 | 1 | 1 | Exclusive access granted
+
+
 Implementation
 --------------
 
@@ -162,6 +191,56 @@ For example having 0 bits for write requesters in the 30-bit design allows up
 to 32767 threads to coexist. And similarly, any count above this turns the
 operation into an apparent write access due to users bit leaking into the
 writers bits, causing the operation to be reverted.
+
+The list of possible transitions follows :
+
+  - unlocked ---> shared access
+
+      lock_ul_to_shared() {
+        while (xadd(lock, R) & W) {
+          xadd(lock, -R);
+          while (lock & W)
+            pause();
+        }
+      }
+
+      lock_ul_to_limited() {
+        while (xadd(lock, M|R) & (M|W)) {
+          xadd(lock, -(M|R));
+          while (lock & (M|W))
+            pause();
+        }
+      }
+
+      lock_ul_to_exclusive() {
+        while (xadd(lock, W|M|R) & W) {
+          xadd(lock, -(W|M|R));
+          while (lock & W)
+            pause();
+        }
+        while (lock & R & -2)
+          pause();
+      }
+
+      lock_lim_to_exclusive() {
+        while (xadd(lock, W) & W) {
+          xadd(lock, -W);
+          while (lock & W)
+            pause();
+        }
+        while (lock & R & -2)
+          pause();
+      }
+
+      lock_shr_to_exclusive() {
+        while (xadd(lock, W|M) & W) {
+          xadd(lock, -(W|M));
+          while (lock & W)
+            pause();
+        }
+        while (lock & R & -2)
+          pause();
+      }
 
 
 Application
