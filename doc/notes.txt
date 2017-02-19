@@ -1,0 +1,330 @@
+2017-02-19 - Upgradable locks
+-----------------------------
+
+
+Principle
+---------
+
+When dealing with complex structures such as trees, maintaining a write lock
+on a tree during write operations is expensive because most of the time is
+spent looking up the entry to modify and very little time is spent modifying
+the entry, so during this time no read operation may be performed.
+
+The "upgradable" lock tries to address this issue by having 4 levels of locking
+for a shared resource :
+
+  - unlocked                (or UL)
+  - read-only shared access (or RS for read shared)
+  - upgradable read access  (or MS for modify shared, indicating a write intent)
+  - exclusive write access  (or WX for write exclusive)
+
+The upgradable read access is an intermediary state between the read only
+shared access and the write access. It is used only during the lookup phase
+necessary to perform some changes. It allows other regular readers to access
+the resource. Once the resource is located, it is turned into an exclusive
+write access, and once all readers are gone, the change can be performed.
+This type of lock is exclusive against itself, which means that it is not
+allowed for two writers to use this one at the same time (otherwise the
+structure of the tree may become inconsistent across the lock).
+
+The compatiblity matrix looks like this for any two threads :
+
+                      thread 1
+
+                | UL | RS | MS | WX
+           -----+----+----+----+-----
+             UL |  X |  X |  X |  X
+           -----+----+----+----+-----
+             RS |  X |  X |  X |
+  thread 2 -----+----+----+----+-----
+             MS |  X |  X |    |
+           -----+----+----+----+-----
+             WX |  X |    |    |
+           -----+----+----+----+-----
+
+
+Implementation
+--------------
+
+In terms of implementation, these states are turned into "no more XXX" bits :
+
+  - RS = "no more writes"
+  - MS = "no more modifications nor writes"
+  - WX = "no more accesses"
+
+Thus the resource is effectively locked in a given state after the condition
+is realized. So there is always a transition period between one state and
+another during which the caller of the lock has to wait for the condition to
+be satisfied, as could be translated in the pseudo language below, describing
+some atomic sequences of operations :
+
+   lock_rs() {
+      wait_for_no_more_writer();
+      inc_reader_count();
+   }
+
+   lock_ms() {
+      wait_for_no_more_writer_nor_modifier();
+      inc_modifier_count();
+   }
+
+   lock_wx() {
+      wait_for_no_more_access();
+      inc_modifier_count();
+   }
+
+These operations can be performed using atomic additions into a single integer
+holding rs_count, ms_count and wx_count, provided that the current state is
+known :
+
+  - lock_ul_to_rs <=> lock += rs_lock;
+  - lock_ul_to_ms <=> lock += ms_lock;
+  - lock_ul_to_wx <=> lock += wx_lock;
+  - lock_ms_to_wx <=> lock += wx_lock - ms_lock;
+  - unlock_rs     <=> lock -= rs_lock;
+  - unlock_ms     <=> lock -= ms_lock;
+  - unlock_wx     <=> lock -= wx_lock;
+
+And the resulting value of the lock immediately allows to check for users in
+multiple classes at once.
+
+Note, there's no prerequisite that the upgraded lock has the same value as a
+simple exclusive lock. Actually both of them may easily coexist if that's
+easier to deal with. Depending on the architecture it might be easier to test
+some bits at once, and on other architectures it might be preferable to take
+multiple bitfields at once (eg: wx could have rs, ms and wx at the same time).
+For this reason it might be reasonable not to consider that an upgraded lock
+is the same as a pure write lock so that applications take care of using the
+appropriate unlock method.
+
+For instance, considering that wx takes ms and rs, we could have :
+
+  lock_wx() <=> lock += wx_lock + ms_lock + rs_lock.
+
+Testing for unicity here is simple, it consists in checking for any rs_lock
+value greater than 1, which is still compatible with the use of a bit field.
+For example if there are 16 bits for the rs_lock, testing for > 1 is equivalent
+to testing for >= 2, which is testing against mask 0xfffe.
+
+In this case the rs_lock counter could in fact be seen as a user counter or a
+visitor counter.
+
+One difficulty with 3 fields like this is that for any given lock counter, it
+has to be divided in 3 equal parts. For 30 bits, it leaves only 10 bits per
+part, implying only 1023 users. For 62 bits, it's 20 bits per part, or 1048575
+users. One point is that while there may be many concurrent readers, there will
+only be some concurrent attempts to read and some concurrent attempts to write,
+unless we make it mandatory to request a write before upgrading it. In practice
+only one writer will be present at most, so one bit should be enough, but since
+it would require two operations that's not optimal. And we can't accept the
+risk of an overflow on the write part because during a check it would let some
+readers pass through in the middle of a write operation.
+
+However we can in shrink the number of write request bits. Indeed, we have only
+one at once except during attempts to get a write access. But if we have an
+overflow on the write request part, then it leaks into the writers part and
+still maintains the tree protected against any other access. The only side
+effect of such an overflow is that it may temporarily deny access to a pure
+reader for the time it takes to revert the operation, but it never attacks the
+tree's integrity. So we just need to minimize this probability for performance
+purposes. Tests show that using 2 bits here achieves 3% better performance under
+stress (50% read-only, 50% read-update) than a single bit, and the performance
+doesn't increase when going above. With 2 bits we can have up to 3 concurrent
+threads trying to grab the lock without locking reads, so that should be more
+than enough.
+
+Example with 30 bits :
+
+  - 31..18 : 14 bits for writers
+  - 17..16 : 2  bits for write requesters
+  - 16..2  : 14 bits for users
+
+=> up to 13107 writers in the tree or 16383 readers.
+
+With 62 bits :
+
+  - 30 bits for writers
+  - 2  bits for requesters
+  - 30 bits for users
+  => ~850M writers, ~1.07B readers
+
+or :
+
+  - 28 bits for writers
+  - 6  bits for requesters
+  - 28 bits for users
+  => 264 million writers, 268 million readers
+
+It might be possible to make the number of bits in the middle configurable so
+that depending on the write-to-read ratio we can further limit the risk of
+collisions, or instead increase the ability to support larger thread counts.
+For example having 0 bits for write requesters in the 30-bit design allows up
+to 32767 threads to coexist. And similarly, any count above this turns the
+operation into an apparent write access due to users bit leaking into the
+writers bits, causing the operation to be reverted.
+
+
+Application
+-----------
+
+A typical use case is for ebtrees in order to secure the following operations :
+  - node *insert(tree, node) : insert node <node> into tree <tree>, return
+                               <node> or another one if unique bit is set
+  - node *lookup(tree, key)  : lookup value <key> in tree <tree>, return the
+                               first matching node or NULL
+  - node *delete(tree, node) : delete node <node> from tree <tree>. Returns the
+                               node if properly deleted or NULL if the node was
+                               not there.
+  - node *pick(tree, key)    : lookup value <key> in tree <tree>, detach it from
+                               the tree and return it, or return NULL if not
+                               found.
+
+Implementation :
+  - insert(tree, node) {
+        lock_ms(tree);
+        walk_down_to(node->key);
+        lock_ms_to_wx(tree);
+        insert_node_here(node);
+        unlock_wx(tree);
+    }
+
+  - lookup(tree, key) {
+        lock_rs(tree);
+        walk_down_to(key);
+        unlock_rs(tree);
+    }
+
+  - delete(tree, node) {
+        lock_wx(tree);
+        delete_node(node);
+        unlock_wx(tree);
+    }
+
+  - pick(tree, key) {
+        lock_ms(tree);
+        walk_down_to(key);
+        lock_ms_to_wx(tree);
+        delete_node(node);
+        unlock_wx(tree);
+    }
+
+For some applications like a scheduler, all operations will be either pick() or
+insert(). All of them will be exclusive between each other. For each entry,
+there will be exactly one insert() and one pick(). The pick() operation here is
+problematic as it will serialize all accesses. An alternative approach consists
+in retryable lookups + deletes :
+
+   do {
+      node = lookup_next(tree);
+   } while (node && !delete(tree, node));
+
+This will also ensure atomicity during the pick up period while not locking the
+whole tree during the descent. And since the lookup() is compatible with the
+lock_ms() used during the descent for the insert() operation, most operations
+can be performed in parallel.
+
+Some operations may be performed in multiple steps without completely unlocking
+the tree. For example in order to use lookup_next(), it might be required that
+the previous element is returned with the tree still locked. But depending on
+what is supposed to be performed, different types of locks might be needed.
+For example, in order to only dump a tree, it is sufficient to lock the tree
+read_only and jump between nodes using lookup_next(). However in order to
+perform a two-step lookup+update as above, it is mandatory to leave the tree
+in an upgradable locked state in order to guarantee that no other subsequent
+modification will be performed nor could block. Last, a complete cleanup of a
+tree could consist in looking up the first element, locking the tree for writes
+and performing deletes alternating with lookup_next().
+
+For this reason it appears that some operations are relative to existing nodes
+and do not affect the locking at all :
+  - lookup_next()
+  - lookup_prev()
+
+It's the caller's responsibility to ensure that the initial node is valid and
+that these functions are used with appropriate locking.
+
+Then there are some lookup functions applying to the tree :
+
+  - lookup_first(), lookup_last()
+  - lookup_key(), ...
+
+These functions may leave the tree in locked read or locked modified state.
+
+Then some functions modify the tree and may leave it in a still modifiable
+state because the write lock has not yet been released ("uncommitted" ?) :
+
+  - pick(), insert(), delete()
+
+
+Data protection
+---------------
+
+The method described here only applies to the tree structure, but doesn't
+prevent data from being modified or even released during the lookups. It is
+important to distinguish two things :
+
+  - the tree structure (linking between nodes)
+  - the data integrity (no use-after-free etc)
+
+The tree is made of nodes linked together, and the locking ensures that no node
+is visited during a tree traversal after being removed from the tree. Thus from
+a tree structure perspective it is safe to free a node that was deleted from
+the tree. However that doesn't mean that there's no other user of this node, eg
+consecutive to a successful lookup operation, so it is up to the application to
+ensure proper refcounting on the data.
+
+A typical lookup_next() operation cannot be performed on a node that was
+removed by another user, regardless of the fact that it has not necessarily
+been freed. And conversely it's not acceptable to leave a node in the tree
+waiting for its refcount to be zeroed before being deleted. If a lookup_next()
+operation has to be used, then it looks like a reasonable expectation that the
+previous lookup leaves the tree locked against modifications.
+
+It does not seem necessary to implement any form of refcounting between the
+tree and the data stored in the tree. While the tree structure relies on the
+nodes themselves, there is no reason for any access to the tree to be done in
+a "degraded" mode where the tree is inconsistent. Thus if all tree access
+operations remain valid, it's up to the application to add proper refcounting
+to its data nodes upon lookups to avoid the risk of concurrent use and removal.
+
+A typical set of "get", "put", "del" operations could be implemented like this :
+
+   node *get_key(tree, key) {
+       node = lookup_locked(tree, key);
+       if (node)
+           node->refcount++;
+       unlock_tree(tree);
+       return node:
+   }
+
+   put_node(node) {
+       node->refcount--;
+   }
+
+   del_node(tree, node) {
+       delete_node(tree, node);
+   }
+
+It *may* make sense to decide that a node stored in the tree has 1 added to its
+refcount but that's only a matter of implementation choice as nothing makes
+this a necessity :
+
+   node *get_key(tree, key) {
+       node = lookup_locked(tree, key);
+       if (node)
+           node->refcount++;
+       unlock_tree(tree);
+       return node:
+   }
+
+   put_node(node) {
+       if (!node->refcount--)
+          free(node);
+   }
+
+   del_node(tree, node) {
+       delete_node(tree, node);
+       if (!node->refcount--)
+          free(node);
+   }
+
