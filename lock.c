@@ -5,164 +5,228 @@
 
 #include "atomic-ops.h"
 
-
-/* TODO: find names.
- *   - read-only / shared-read / visitor locks
- *   - upgradable locks
- *   - exclusive locks
- *
- * Invert names ?
- *  - dont-write
- *  - no-more-reader
- *  - dont-read
- *
- * - Read Shared                  => RS, rs_lock(), rs_unlock()
- * - Upgradable Shared/Exclusive  => US, us_lock(), ux_lock(), ux_unlock(), us_unlock()
- *                                   US, us_lock(), us_upgrade(), us_downgrade(), us_unlock()
- *                                   US, us_lock(), us_exclusive(), us_shared(), us_unlock()
- * - Write Exclusive              => WX, wx_lock(), wx_unlock()
- *
- *
- * - Read       => r_lock(), r_unlock()
- * - Upgradable => u_lock(), u_lock_ex(), u_unlock_ex(), u_unlock()
- * - Write      => w_lock(), w_unlock()
- *
- */
-
 /*
- * TODO ebtrees:
- *   - plan on setting a refcount on returned nodes (first, next, lookup, insert_unique, ...)
- *   - for instance, next() would do  next->refcnt++; curr->refcnt--;
+ * Progressive locks - principles of operations
+ *
+ * Locks have 4 states :
+ *
+ *   - UL: unlocked     : nobody claims the lock
+ *   - RD: read-locked  : some users are reading the shared resource
+ *   - FR: frozen       : reading is OK but nobody else may freeze nor write
+ *   - WR: write-locked : exclusive access for writing
+ *
+ * The locks are implemented using cumulable bit fields representing from
+ * the lowest to the highest bits :
+ *
+ *   - the number of readers (read, freeze)
+ *   - the number of freeze requests
+ *   - the number of write requests
+ *
+ * The number of freeze requests remains on a low bit count and this number
+ * is placed just below the write bit count so that if it overflows, it
+ * temporarily overflows into the write bits and appears as requesting an
+ * exclusive write access. This allows the number of freeze bits to remain
+ * very low, 1 technically, but 2 to avoid needless lock/unlock sequences
+ * during common conflicts.
+ *
+ * A freeze request also counts as a read request as technically it's a reader
+ * which plans to write later.
+ *
+ * The FR lock cannot be taken if another FR or WR lock is already held. But
+ * once the FR lock is held, the owner is automatically granted the right to
+ * upgrade it to WR without checking. And it can take and release the WR lock
+ * multiple times atomically if needed. It must only wait for last readers to
+ * leave. This means that another thread may very well take the WR lock and
+ * wait for the FR and RD locks to leave (in practice checking for RD is
+ * enough for a writer).
+ *
+ * The lock can be upgraded between various states at the demand of the
+ * requester :
+ *
+ *   - UL<->RD : take_rd() / drop_rd()   (adds/subs RD)
+ *   - UL<->FR : take_fr() / drop_fr()   (adds/subs FR+RD)
+ *   - UL<->WR : take_wx() / drop_wx()   (adds/subs WR)
+ *   - FR<->WR : take_wr() / drop_wr()   (adds/subs WR-FR-RD)
+ *
+ * With the two lowest bits remaining reserved for other usages (eg: ebtrees),
+ * we can have this split :
+ *
+ * - on 32-bit architectures :
+ *   - 31..18 : 14 bits for writers
+ *   - 17..16 : 2  bits for freezers
+ *   - 16..2  : 14 bits for users
+ *   => up to 16383 users (readers or writers)
+ *
+ * - on 64-bit architectures :
+ *   - 63..34 : 30 bits for writers
+ *   - 33..32 : 2  bits for freezers
+ *   - 31..2  : 30 bits for users
+ *   => up to ~1.07B users (readers or writers)
  */
+
 //#define USE_FUTEX
 #define USE_EXP1
 #if defined(USE_EXP1)
 
-/* 3 modes of operation :
- *   - read lookup  (RL) : all such threads may access the data at the same
- *                         time, this is just for read operations.
- *   - write lookup (WL) : only one such thread is allowed to pass, access
- *                         is still shared with normal readers above.
- *   - write commit (WC) : only one such thread has access at all.
- *
- * bits on 32 bits archs :
- *   - 31..22: WC
- *   - 21..12: WL
- *   - 11..2:  RL
- *
- * bits on 64 bits archs :
- *   - 61..42: WC
- *   - 41..22: WL
- *   - 21..2:  RL
- *
- * This allows up to 1023 threads to access the resource on 32-bit archs, and
- * up to 1048575 threads on 64-bit archs, with the two lower bits reserved for
- * other purposes. Writer has precedence : the bit is set until all readers go
- * away. Since conflicts will most often be writer waiting for readers to go,
- * we don't ant to leave the W lock during this time so that we limit locked
- * memory accesses. Using a 4^N backoff on exclusive resources seems to be the
- * most efficient method (and by far).
- */
+#if defined(__i386__) || defined (__i486__) || defined (__i586__) || defined (__i686__)
 
 #define RL_1   0x00000004
-#define RL_ANY 0x00000FFC
-#define WL_1   0x00001000
-#define WL_ANY 0x003FF000
-#define WC_1   0x00400000
-#define WC_ANY 0xFFC00000
+#define RL_ANY 0x0000FFFC
+#define FL_1   0x00010000
+#define FL_ANY 0x00030000
+#define WL_1   0x00040000
+#define WL_ANY 0xFFFC0000
 
-/* provide SR access */
+#elif defined(__x86_64__)
+
+#define RL_1   0x0000000000000004
+#define RL_ANY 0x00000000FFFFFFFC
+#define FL_1   0x0000000100000000
+#define FL_ANY 0x0000000300000000
+#define WL_1   0x0000000400000000
+#define WL_ANY 0xFFFFFFFC00000000
+
+#endif
+
+/* request shared read access */
 static inline
-void ro_lock(volatile unsigned long *lock)
+void take_rd(volatile unsigned long *lock)
 {
-	/* try to get a shared read access, retry if the XW is there, which is
-	 * supposed to be rare since the W lock is for the final commit.
-	 * Retrying in 2^N is enough here since we're waiting for a very short
-	 * period.
-	 */
-	if (xadd(lock, RL_1) & WC_ANY) {
+	if (__builtin_expect(xadd(lock, RL_1) & WL_ANY, 0)) {
 		unsigned long j = 8;
 		do {
 			atomic_sub(lock, RL_1);
 			do {
 				cpu_relax_long(j);
 				j = j << 1;
-			} while (*lock & WC_ANY);
-		} while (xadd(lock, RL_1) & WC_ANY);
+			} while (*lock & WL_ANY);
+		} while (xadd(lock, RL_1) & WL_ANY);
 	}
 }
 
 static inline
-void mw_lock(volatile unsigned long *lock)
+void drop_rd(volatile unsigned long *lock)
 {
-	unsigned long j;
+	atomic_sub(lock, RL_1);
+}
 
-	j = 10;
-	while (xadd(lock, WL_1) & (WC_ANY | WL_ANY)) {
+/* request a frozen read access (shared for reads only) */
+static inline
+void take_fr(volatile unsigned long *lock)
+{
+	if (xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY)) {
+		unsigned long j = 8;
 		do {
-			cpu_relax_long(j);
-			j = j << 2;
-		} while (*lock & (WC_ANY | WL_ANY));
+			atomic_sub(lock, FL_1 | RL_1);
+			do {
+				cpu_relax_long(j);
+				j = j << 1;
+			} while (*lock & (WL_ANY | FL_ANY));
+		} while (xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY));
 	}
 }
 
 static inline
-void wr_lock(volatile unsigned long *lock)
+void drop_fr(volatile unsigned long *lock)
+{
+	atomic_sub(lock, FL_1 | RL_1);
+}
+
+/* take the WR lock under the FR lock */
+static inline
+void take_wr(volatile unsigned long *lock)
 {
 	unsigned long r;
 	unsigned long j;
 
-	/* Note: we already hold the WL lock, we don't care about other
-	 * WL waiters, since they won't get their lock, but we want the
-	 * readers to leave before going on.
-	 */
-
-	r = xadd(lock, WC_1);
+	r = xadd(lock, WL_1 - FL_1 - RL_1);
+	r -= RL_1; // subtract our own count
 
 	for (j = 10; r & RL_ANY; r = *lock) {
 		cpu_relax_long(j);
-		j = j << 2;
+		j = j << 1;
 	}
 }
 
-/* immediately take the WR lock */
-//static inline
-void wr_fast_lock(volatile unsigned long *lock)
+/* drop the WR lock and go back to the FR lock */
+static inline
+void drop_wr(volatile unsigned long *lock)
+{
+	atomic_sub(lock, WL_1 - FL_1 - RL_1);
+}
+
+/* immediately take the WR lock from UL and wait for readers to leave */
+static inline
+void take_wx(volatile unsigned long *lock)
 {
 	unsigned long r;
 	unsigned long j;
 
-	/* try to get an exclusive write access */
-
-	j = 10;
-	while ((r = xadd(lock, WC_1)) & (WC_ANY | WL_ANY)) {
-		/* another thread was already there, wait for it to clear
-		 * the lock for us.
-		 */
+	if ((r = xadd(lock, WL_1)) & WL_ANY) {
+		/* wait for other writers to leave */
+		unsigned long j = 8;
 		do {
+			int must_unlock = *lock >= 2*WL_1;
+
+			if (must_unlock)
+				atomic_sub(lock, WL_1);
 			cpu_relax_long(j);
-			j = j << 2;       //  grow in 4^N
-		} while (*lock & (WC_ANY | WL_ANY));
+			j = j << 1;
+			if (must_unlock)
+				xadd(lock, WL_1);
+		} while ((r = *lock) >= 2*WL_1);
 	}
 
 	/* wait for readers to go */
 	for (j = 10; r & RL_ANY; r = *lock) {
 		cpu_relax_long(j);
-		j = j << 2;
+		j = j << 1;
 	}
+}
+
+/* drop the WR lock entirely */
+static inline
+void drop_wx(volatile unsigned long *lock)
+{
+	atomic_sub(lock, WL_1);
+}
+
+static inline
+void ro_lock(volatile unsigned long *lock)
+{
+	return take_rd(lock);
+}
+
+static inline
+void mw_lock(volatile unsigned long *lock)
+{
+	return take_fr(lock);
+}
+
+static inline
+void wr_lock(volatile unsigned long *lock)
+{
+	return take_wr(lock);
+}
+
+/* immediately take the WR lock */
+static inline
+void wr_fast_lock(volatile unsigned long *lock)
+{
+	return take_wx(lock);
 }
 
 static inline
 void ro_unlock(volatile unsigned long *lock)
 {
-	atomic_sub(lock, RL_1);
+	drop_rd(lock);
 }
 
-/* unlock both the shared and exclusive writes */
+/* goes back to unlock state from exclusive write */
 static inline
 void wr_unlock(unsigned long *lock)
 {
-	atomic_and(lock, ~(WC_ANY | WL_ANY));
+	drop_wx(lock);
 }
 
 #elif defined(USE_EXP)
