@@ -101,13 +101,11 @@ void drop_rd(volatile unsigned long *lock)
 static inline
 void take_fr(volatile unsigned long *lock)
 {
-	if (__builtin_expect(xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY), 0)) {
+	while (__builtin_expect(xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY), 0)) {
+		atomic_sub(lock, FL_1 | RL_1);
 		do {
-			atomic_sub(lock, FL_1 | RL_1);
-			do {
-				cpu_relax_long(4);
-			} while (*lock & (WL_ANY | FL_ANY));
-		} while (xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY));
+			cpu_relax_long(4);
+		} while (*lock & (WL_ANY | FL_ANY));
 	}
 }
 
