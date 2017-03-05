@@ -93,13 +93,9 @@ static inline
 void take_rd(volatile unsigned long *lock)
 {
 	if (__builtin_expect(xadd(lock, RL_1) & WL_ANY, 0)) {
-		unsigned long j = 8;
 		do {
 			atomic_sub(lock, RL_1);
-			do {
-				cpu_relax_long(j);
-				j = j << 1;
-			} while (*lock & WL_ANY);
+			while (*lock & WL_ANY);
 		} while (xadd(lock, RL_1) & WL_ANY);
 	}
 }
@@ -114,13 +110,11 @@ void drop_rd(volatile unsigned long *lock)
 static inline
 void take_fr(volatile unsigned long *lock)
 {
-	if (xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY)) {
-		unsigned long j = 8;
+	if (__builtin_expect(xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY), 0)) {
 		do {
 			atomic_sub(lock, FL_1 | RL_1);
 			do {
-				cpu_relax_long(j);
-				j = j << 1;
+				cpu_relax_long(4);
 			} while (*lock & (WL_ANY | FL_ANY));
 		} while (xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY));
 	}
@@ -137,15 +131,11 @@ static inline
 void take_wr(volatile unsigned long *lock)
 {
 	unsigned long r;
-	unsigned long j;
 
 	r = xadd(lock, WL_1 - FL_1 - RL_1);
 	r -= RL_1; // subtract our own count
-
-	for (j = 10; r & RL_ANY; r = *lock) {
-		cpu_relax_long(j);
-		j = j << 1;
-	}
+	while (r & RL_ANY)
+		r = *lock;
 }
 
 /* drop the WR lock and go back to the FR lock */
@@ -162,7 +152,7 @@ void take_wx(volatile unsigned long *lock)
 	unsigned long r;
 	unsigned long j;
 
-	if ((r = xadd(lock, WL_1)) & WL_ANY) {
+	if (__builtin_expect((r = xadd(lock, WL_1)) & WL_ANY, 0)) {
 		/* wait for other writers to leave */
 		unsigned long j = 8;
 		do {
@@ -178,10 +168,8 @@ void take_wx(volatile unsigned long *lock)
 	}
 
 	/* wait for readers to go */
-	for (j = 10; r & RL_ANY; r = *lock) {
-		cpu_relax_long(j);
-		j = j << 1;
-	}
+	while (r & RL_ANY)
+		r = *lock;
 }
 
 /* drop the WR lock entirely */
