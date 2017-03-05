@@ -141,21 +141,10 @@ static inline
 void take_wx(volatile unsigned long *lock)
 {
 	unsigned long r;
-	unsigned long j;
 
-	if (__builtin_expect((r = xadd(lock, WL_1)) & WL_ANY, 0)) {
-		/* wait for other writers to leave */
-		unsigned long j = 8;
-		do {
-			int must_unlock = *lock >= 2*WL_1;
-
-			if (must_unlock)
-				atomic_sub(lock, WL_1);
-			cpu_relax_long(j);
-			j = j << 1;
-			if (must_unlock)
-				xadd(lock, WL_1);
-		} while ((r = *lock) >= 2*WL_1);
+	while (__builtin_expect((r = xadd(lock, WL_1)) & WL_ANY, 0)) {
+		atomic_sub(lock, WL_1);
+		cpu_relax_long(5);
 	}
 
 	/* wait for readers to go */
