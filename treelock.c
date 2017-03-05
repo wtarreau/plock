@@ -34,15 +34,15 @@
 pthread_t thr[MAXTHREADS];
 unsigned int nbthreads, do_lock, arg_wait;
 int arg_nice;
-volatile unsigned int actthreads = 0;
+volatile unsigned long actthreads = 0;
 int read_ratio = 256;
-unsigned int global_lock = 0;
+unsigned long global_lock = 0;
 
-static volatile unsigned int step;
+static volatile unsigned long step;
 
 static struct timeval start, stop;
-static unsigned int global_work;
-static unsigned int final_work;
+static unsigned long global_work;
+static unsigned long final_work;
 
 
 void oneatwork(int thr)
@@ -177,7 +177,7 @@ int main(int argc, char **argv)
 		start.tv_sec++;
 	}
 	i = i / 1000 + (int)(stop.tv_sec - start.tv_sec) * 1000;
-	printf("threads: %d loops: %d time(ms): %d rate(lps): %Ld\n",
+	printf("threads: %d loops: %lu time(ms): %d rate(lps): %Ld\n",
 	       nbthreads, final_work, i, final_work * 1000ULL / i);
 
 	/* All the work has ended */

@@ -73,7 +73,7 @@
 
 /* provide SR access */
 static inline
-void ro_lock(volatile unsigned int *lock)
+void ro_lock(volatile unsigned long *lock)
 {
 	/* try to get a shared read access, retry if the XW is there, which is
 	 * supposed to be rare since the W lock is for the final commit.
@@ -81,7 +81,7 @@ void ro_lock(volatile unsigned int *lock)
 	 * period.
 	 */
 	if (xadd(lock, RL_1) & WC_ANY) {
-		unsigned int j = 8;
+		unsigned long j = 8;
 		do {
 			atomic_sub(lock, RL_1);
 			do {
@@ -93,9 +93,9 @@ void ro_lock(volatile unsigned int *lock)
 }
 
 static inline
-void mw_lock(volatile unsigned int *lock)
+void mw_lock(volatile unsigned long *lock)
 {
-	unsigned int j;
+	unsigned long j;
 
 	j = 10;
 	while (xadd(lock, WL_1) & (WC_ANY | WL_ANY)) {
@@ -107,10 +107,10 @@ void mw_lock(volatile unsigned int *lock)
 }
 
 static inline
-void wr_lock(volatile unsigned int *lock)
+void wr_lock(volatile unsigned long *lock)
 {
-	unsigned int r;
-	unsigned int j;
+	unsigned long r;
+	unsigned long j;
 
 	/* Note: we already hold the WL lock, we don't care about other
 	 * WL waiters, since they won't get their lock, but we want the
@@ -127,10 +127,10 @@ void wr_lock(volatile unsigned int *lock)
 
 /* immediately take the WR lock */
 //static inline
-void wr_fast_lock(volatile unsigned int *lock)
+void wr_fast_lock(volatile unsigned long *lock)
 {
-	unsigned int r;
-	unsigned int j;
+	unsigned long r;
+	unsigned long j;
 
 	/* try to get an exclusive write access */
 
@@ -153,14 +153,14 @@ void wr_fast_lock(volatile unsigned int *lock)
 }
 
 static inline
-void ro_unlock(volatile unsigned int *lock)
+void ro_unlock(volatile unsigned long *lock)
 {
 	atomic_sub(lock, RL_1);
 }
 
 /* unlock both the shared and exclusive writes */
 static inline
-void wr_unlock(unsigned int *lock)
+void wr_unlock(unsigned long *lock)
 {
 	atomic_and(lock, ~(WC_ANY | WL_ANY));
 }
@@ -191,16 +191,16 @@ void wr_unlock(unsigned int *lock)
 #define SR_ANY 0x0000FFFF
 
 /* provide SR access */
-void ro_lock(volatile unsigned int *lock)
+void ro_lock(volatile unsigned long *lock)
 {
-	int j = 5;
+	long j = 5;
 	while (1) {
 		/* try to get a shared read access, retry if the XW is there */
 		if (!(xadd(lock, SR_1) & XW))
 			break;
 		atomic_sub(lock, SR_1);
 		do {
-			int i;
+			long i;
 			for (i = 0; i < j; i++) {
 				cpu_relax();
 				cpu_relax();
@@ -210,9 +210,9 @@ void ro_lock(volatile unsigned int *lock)
 	}
 }
 
-void mw_lock0(volatile unsigned int *lock)
+void mw_lock0(volatile unsigned long *lock)
 {
-	int i, j = 5;
+	long i, j = 5;
 
 	while (1) {
 		i = xadd(lock, XR_1 + SR_1);
@@ -251,10 +251,10 @@ void mw_lock0(volatile unsigned int *lock)
 	} while (i & XW);
 }
 
-void mw_lock(volatile unsigned int *lock)
+void mw_lock(volatile unsigned long *lock)
 {
-	unsigned int i, j = 3;
-	unsigned int need_xr = XR_1;
+	unsigned long i, j = 3;
+	unsigned long need_xr = XR_1;
 
 	while (1) {
 		i = xadd(lock, need_xr + SR_1);
@@ -282,10 +282,10 @@ void mw_lock(volatile unsigned int *lock)
 	}
 }
 
-void wr_lock(volatile unsigned int *lock)
+void wr_lock(volatile unsigned long *lock)
 {
-	unsigned int r;
-	int j;
+	unsigned long r;
+	long j;
 
 	/* Note: we already hold the XR lock, we don't care about other
 	 * XR waiters, since they won't get their lock, but we want the
@@ -295,7 +295,7 @@ void wr_lock(volatile unsigned int *lock)
 	r = xadd(lock, XW - XR_1 - SR_1) - SR_1;
 
 	for (j = 2; r & SR_ANY; r = *lock) {
-		int i;
+		long i;
 		for (i = 0; i < j; i++) {
 			cpu_relax();
 			cpu_relax();
@@ -305,10 +305,10 @@ void wr_lock(volatile unsigned int *lock)
 }
 
 /* immediately take the WR lock */
-void wr_fast_lock(volatile unsigned int *lock)
+void wr_fast_lock(volatile unsigned long *lock)
 {
-	unsigned int r;
-	int j = 5;
+	unsigned long r;
+	long j = 5;
 
 	while (1) {
 		/* try to get a shared read access, retry if the XW is there */
@@ -317,7 +317,7 @@ void wr_fast_lock(volatile unsigned int *lock)
 			break;
 		atomic_sub(lock, XW);
 		do {
-			int i;
+			long i;
 			for (i = 0; i < j; i++) {
 				cpu_relax();
 				cpu_relax();
@@ -328,7 +328,7 @@ void wr_fast_lock(volatile unsigned int *lock)
 
 	/* wait for readers to go */
 	for (j = 2; r & SR_ANY; r = *lock) {
-		int i;
+		long i;
 		for (i = 0; i < j; i++) {
 			cpu_relax();
 			cpu_relax();
@@ -337,29 +337,29 @@ void wr_fast_lock(volatile unsigned int *lock)
 	}
 }
 
-void ro_unlock(volatile unsigned int *lock)
+void ro_unlock(volatile unsigned long *lock)
 {
 	atomic_add(lock, -SR_1);
 }
 
-void mw_unlock(volatile unsigned int *lock)
+void mw_unlock(volatile unsigned long *lock)
 {
 	atomic_add(lock, -(XR_1 + SR_1));
 }
 
 /* unlock both the MW and the WR */
-void wr_unlock(unsigned int *lock)
+void wr_unlock(unsigned long *lock)
 {
 	atomic_add(lock, -XW);
 }
 
 #elif !defined(USE_FUTEX)
-void ro_lock(volatile unsigned int *lock)
+void ro_lock(volatile unsigned long *lock)
 {
-	int j = 5;
+	long j = 5;
 	while (1) {
 		//for (j /= 2; *lock & 1;) {
-		//	int i;
+		//	long i;
 		//	for (i = 0; i < j; i++) {
 		//		cpu_relax();
 		//		cpu_relax();
@@ -372,7 +372,7 @@ void ro_lock(volatile unsigned int *lock)
 			break;
 		atomic_add(lock, -0x10000);
 		do {
-			int i;
+			long i;
 			for (i = 0; i < j; i++) {
 				cpu_relax();
 				cpu_relax();
@@ -382,16 +382,16 @@ void ro_lock(volatile unsigned int *lock)
 	}
 }
 
-void ro_unlock(volatile unsigned int *lock)
+void ro_unlock(volatile unsigned long *lock)
 {
 	atomic_add(lock, -0x10000);
 }
 
-void mw_lock0(volatile unsigned int *lock)
+void mw_lock0(volatile unsigned long *lock)
 {
-	int j = 8;
+	long j = 8;
 	while (1) {
-		unsigned int r;
+		unsigned long r;
 
 		r = xadd(lock, 2);
 		if (!(r & 0xFFFF)) /* none of MW or WR */
@@ -399,7 +399,7 @@ void mw_lock0(volatile unsigned int *lock)
 		r = xadd(lock, -2);
 
 		for (j /= 2; r & 0xFFFF; r = *lock) {
-			int i;
+			long i;
 			for (i = 0; i < j; i++) {
 				cpu_relax();
 				cpu_relax();
@@ -409,16 +409,16 @@ void mw_lock0(volatile unsigned int *lock)
 	}
 }
 
-void mw_lock(volatile unsigned int *lock)
+void mw_lock(volatile unsigned long *lock)
 {
-	int j = 5;
+	long j = 5;
 	while (1) {
 		if (!(xadd(lock, 2) & 0xFFFF))
 			break;
 		atomic_add(lock, -2);
 		while (*lock & 0xFFFF) {
 			/* either an MW or WR is present */
-			int i;
+			long i;
 			for (i = 0; i < j; i++) {
 				cpu_relax();
 				cpu_relax();
@@ -428,15 +428,15 @@ void mw_lock(volatile unsigned int *lock)
 	}
 }
 
-void mw_unlock(volatile unsigned int *lock)
+void mw_unlock(volatile unsigned long *lock)
 {
 	atomic_add(lock, -2);
 }
 
-void wr_lock(volatile unsigned int *lock)
+void wr_lock(volatile unsigned long *lock)
 {
-	unsigned int r;
-	int j;
+	unsigned long r;
+	long j;
 
 	/* Note: we already hold the MW lock, we don't care about other
 	 * MW waiters, since they won't get their lock, but we want the
@@ -445,7 +445,7 @@ void wr_lock(volatile unsigned int *lock)
 	r = xadd(lock, 0x1);
 
 	for (j = 2; r & 0xFFFF0000; r = *lock) {
-		int i;
+		long i;
 		for (i = 0; i < j; i++) {
 			cpu_relax();
 			cpu_relax();
@@ -455,18 +455,18 @@ void wr_lock(volatile unsigned int *lock)
 }
 
 /* unlock both the MW and the WR */
-void wr_unlock(unsigned int *lock)
+void wr_unlock(unsigned long *lock)
 {
 	atomic_add(lock, -3);
 }
 #elif USE_FUTEX2
 /* USE_FUTEX */
-void ro_lock(volatile unsigned int *lock)
+void ro_lock(volatile unsigned long *lock)
 {
 	/* attempt to get a read lock (0x1000000) and if it fails,
 	 * convert to a read request (0x10000), and wait for a slot.
 	 */
-	int j = xadd(lock, 0x1000000);
+	long j = xadd(lock, 0x1000000);
 	if (!(j & 1))
 		return;
 
@@ -481,17 +481,17 @@ void ro_lock(volatile unsigned int *lock)
 	xadd(lock, 0x1000000-0x10000); /* switch the read req into read again */
 }
 
-void ro_unlock(volatile unsigned int *lock)
+void ro_unlock(volatile unsigned long *lock)
 {
-	int j = xadd(lock, -0x1000000);
+	long j = xadd(lock, -0x1000000);
 	if (j & 1) /* at least one writer is waiting, we'll have to wait both writers and MW-ers */
 		syscall(SYS_futex, lock, FUTEX_WAKE, -1, NULL, NULL, 0);
 }
 
-void mw_lock(volatile unsigned int *lock)
+void mw_lock(volatile unsigned long *lock)
 {
 	while (1) {
-		int j = xadd(lock, 2);
+		long j = xadd(lock, 2);
 		if (!(j & 0xFFFF))
 			break;
 		atomic_add(lock, -2);
@@ -499,16 +499,16 @@ void mw_lock(volatile unsigned int *lock)
 	}
 }
 
-void mw_unlock(volatile unsigned int *lock)
+void mw_unlock(volatile unsigned long *lock)
 {
-	int j = xadd(lock, -0x2);
+	long j = xadd(lock, -0x2);
 	if (j & 0xFFFFFFFE) /* at least one reader or MW-er is waiting, we'll have to wait everyone */
 		syscall(SYS_futex, lock, FUTEX_WAKE, -1, NULL, NULL, 0);
 }
 
-void wr_lock(volatile unsigned int *lock)
+void wr_lock(volatile unsigned long *lock)
 {
-	unsigned int r;
+	unsigned long r;
 
 	/* Note: we already hold the MW lock, we don't care about other
 	 * MW waiters, since they won't get their lock, but we want the
@@ -523,7 +523,7 @@ void wr_lock(volatile unsigned int *lock)
 }
 
 /* unlock both the MW and the WR */
-void wr_unlock(unsigned int *lock)
+void wr_unlock(unsigned long *lock)
 {
 	atomic_add(lock, -3);
 	if (*lock) /* at least one reader or MW-er is waiting, we'll have to wait everyone */
@@ -531,9 +531,9 @@ void wr_unlock(unsigned int *lock)
 }
 #elif USE_FUTEX3
 /* USE_FUTEX */
-void ro_lock(volatile unsigned int *lock)
+void ro_lock(volatile unsigned long *lock)
 {
-	int j;
+	long j;
 
 	while ((j = xadd(lock, 0x10000)) & 1) {
 		if ((j = xadd(lock, -0x10000)) & 1)
@@ -543,16 +543,16 @@ void ro_lock(volatile unsigned int *lock)
 	}
 }
 
-void ro_unlock(volatile unsigned int *lock)
+void ro_unlock(volatile unsigned long *lock)
 {
-	int j = xadd(lock, -0x10000);
+	long j = xadd(lock, -0x10000);
 	//if (/*(j & 1) &&*/ (j & 0xFFFF0000) == 0x10000) /* we were the last reader and there is a writer */
 		syscall(SYS_futex, lock, FUTEX_WAKE, -1, NULL, NULL, 0);
 }
 
-void mw_lock(volatile unsigned int *lock)
+void mw_lock(volatile unsigned long *lock)
 {
-	int j;
+	long j;
 
 	while ((j = xadd(lock, 0x2)) & 0xFFFE) {
 		if (((j = xadd(lock, -0x2)) & 0xFFFE) != 0x2)
@@ -562,16 +562,16 @@ void mw_lock(volatile unsigned int *lock)
 	}
 }
 
-void mw_unlock(volatile unsigned int *lock)
+void mw_unlock(volatile unsigned long *lock)
 {
-	int j = xadd(lock, -0x2);
+	long j = xadd(lock, -0x2);
 	//	if ((j & 0xFFFE) != 0x2) /* at least one MW-er is waiting */
 		syscall(SYS_futex, lock, FUTEX_WAKE, -1, NULL, NULL, 0);
 }
 
-void wr_lock(volatile unsigned int *lock)
+void wr_lock(volatile unsigned long *lock)
 {
-	unsigned int j;
+	unsigned long j;
 
 	/* Note: we already hold the MW lock, we don't care about other
 	 * MW waiters, since they won't get their lock, but we want the
@@ -590,20 +590,20 @@ void wr_lock(volatile unsigned int *lock)
 }
 
 /* unlock both the MW and the WR */
-void wr_unlock(unsigned int *lock)
+void wr_unlock(unsigned long *lock)
 {
-	unsigned int j = xadd(lock, -0x3);
+	unsigned long j = xadd(lock, -0x3);
 	//if (j > 3) /* at least one reader or one MW-er was waiting */
 		syscall(SYS_futex, lock, FUTEX_WAKE, -1, NULL, NULL, 0);
 }
 #else
-void ro_lock(volatile unsigned int *lock)
+void ro_lock(volatile unsigned long *lock)
 {
 	if (!(xadd(lock, 0x10000) & 1)) /* maybe check 3 instead to be fairer */
 		return;
 
 	while (1) {
-		int i;
+		long i;
 
 		if ((i = xadd(lock, 4 - 0x10000)) & 1)
 			syscall(SYS_futex, lock, FUTEX_WAIT, i + 4 - 0x10000, NULL, NULL, 0);
@@ -612,7 +612,7 @@ void ro_lock(volatile unsigned int *lock)
 	}
 }
 
-void ro_unlock(volatile unsigned int *lock)
+void ro_unlock(volatile unsigned long *lock)
 {
 	unsigned i = xadd(lock, -0x10000);
 
@@ -621,9 +621,9 @@ void ro_unlock(volatile unsigned int *lock)
 		syscall(SYS_futex, lock, FUTEX_WAKE, -1, NULL, NULL, 0);
 }
 
-void mw_lock(volatile unsigned int *lock)
+void mw_lock(volatile unsigned long *lock)
 {
-	unsigned int r;
+	unsigned long r;
 
 	while (1) {
 		if (!atomic_bts(lock, 1)) /* try to be the first one to set bit 1 */
@@ -634,15 +634,15 @@ void mw_lock(volatile unsigned int *lock)
 	}
 }
 
-void mw_unlock(volatile unsigned int *lock)
+void mw_unlock(volatile unsigned long *lock)
 {
 	atomic_add(lock, -2);
 	/////// FIXME: unused
 }
 
-void wr_lock(volatile unsigned int *lock)
+void wr_lock(volatile unsigned long *lock)
 {
-	unsigned int r;
+	unsigned long r;
 
 	/* Note: we already hold the MW lock, we don't care about other
 	 * MW waiters, since they won't get their lock, but we want the
@@ -659,7 +659,7 @@ void wr_lock(volatile unsigned int *lock)
 }
 
 /* unlock both the MW and the WR */
-void wr_unlock(unsigned int *lock)
+void wr_unlock(unsigned long *lock)
 {
 	if ((xadd(lock, -3) & 0xFFFC) != 0) /* someone is waiting */
 		syscall(SYS_futex, lock, FUTEX_WAKE, -1, NULL, NULL, 0);
@@ -671,7 +671,7 @@ void wr_unlock(unsigned int *lock)
 int total;
 int main(int argc, char **argv)
 {
-	int l;
+	long l;
 
 	l = atoi(argv[1]);
 	total = 0;
