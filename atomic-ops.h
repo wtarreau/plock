@@ -1,24 +1,24 @@
-#ifndef ATOMIC_OPS_H
-#define ATOMIC_OPS_H
+#ifndef PL_ATOMIC_OPS_H
+#define PL_ATOMIC_OPS_H
 
 #if defined(__i386__) || defined (__i486__) || defined (__i586__) || defined (__i686__)
 
 /* x86 32 bits */
 
-static inline void cpu_relax()
+static inline void pl_cpu_relax()
 {
 	asm volatile("rep;nop\n" ::: "memory");
 }
 
-static inline void cpu_relax_long(unsigned long cycles)
+static inline void pl_cpu_relax_long(unsigned long cycles)
 {
 	do {
-		cpu_relax();
+		pl_cpu_relax();
 	} while (--cycles);
 }
 
 /* increment value and return non-zero if result is non-null */
-static inline unsigned char atomic_inc(volatile unsigned long *ptr)
+static inline unsigned char pl_inc(volatile unsigned long *ptr)
 {
 	unsigned char ret;
 	asm volatile("lock incl %0\n"
@@ -30,7 +30,7 @@ static inline unsigned char atomic_inc(volatile unsigned long *ptr)
 }
 
 /* decrement value and return non-zero if result is non-null */
-static inline unsigned char atomic_dec(volatile unsigned long *ptr)
+static inline unsigned char pl_dec(volatile unsigned long *ptr)
 {
 	unsigned char ret;
 	asm volatile("lock decl %0\n"
@@ -42,19 +42,19 @@ static inline unsigned char atomic_dec(volatile unsigned long *ptr)
 }
 
 /* increment bit value */
-static inline void atomic_inc_noret(volatile unsigned long *ptr)
+static inline void pl_inc_noret(volatile unsigned long *ptr)
 {
 	asm volatile("lock incl %0\n" : "+m" (*ptr) :: "memory");
 }
 
 /* decrement bit value */
-static inline void atomic_dec_noret(volatile unsigned long *ptr)
+static inline void pl_dec_noret(volatile unsigned long *ptr)
 {
 	asm volatile("lock decl %0\n" : "+m" (*ptr) :: "memory");
 }
 
 /* cost for 100M ops on P-M 1.7: .36s without lock, 1.32s with lock ! */
-static inline void atomic_add(volatile unsigned long *ptr, unsigned long x)
+static inline void pl_add(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock addl %1, %0\n"
 		     : "+m" (*ptr)
@@ -63,7 +63,7 @@ static inline void atomic_add(volatile unsigned long *ptr, unsigned long x)
 }
 
 /* cost for 100M ops on P-M 1.7: .36s without lock, 1.32s with lock ! */
-static inline void atomic_sub(volatile unsigned long *ptr, unsigned long x)
+static inline void pl_sub(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock subl %1, %0\n"
 		     : "+m" (*ptr)
@@ -72,7 +72,7 @@ static inline void atomic_sub(volatile unsigned long *ptr, unsigned long x)
 }
 
 /* cost for 100M ops on P-M 1.7: .36s without lock, 1.32s with lock ! */
-static inline void atomic_and(volatile unsigned long *ptr, unsigned long x)
+static inline void pl_and(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock andl %1, %0\n"
 		     : "+m" (*ptr)
@@ -81,7 +81,7 @@ static inline void atomic_and(volatile unsigned long *ptr, unsigned long x)
 }
 
 /* test and set a bit. Previous value is returned as 0 (not set) or -1 (set). */
-static inline unsigned long atomic_bts(volatile unsigned long *ptr, const unsigned long bit)
+static inline unsigned long pl_bts(volatile unsigned long *ptr, const unsigned long bit)
 {
 	unsigned long ret;
 	asm volatile("lock btsl %2, %0\n\t"
@@ -93,7 +93,7 @@ static inline unsigned long atomic_bts(volatile unsigned long *ptr, const unsign
 }
 
 /* temp = x; x = *ptr ; *ptr += temp */
-static inline unsigned long xadd(volatile unsigned long *ptr, unsigned long x)
+static inline unsigned long pl_xadd(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock xaddl %0, %1\n"
 		     :  "=r" (x), "+m" (*ptr)
@@ -103,7 +103,7 @@ static inline unsigned long xadd(volatile unsigned long *ptr, unsigned long x)
 }
 
 /* exchange <x> with <*ptr> and return previous contents of <*ptr> */
-static inline unsigned long xchg(volatile unsigned long *ptr, unsigned long x)
+static inline unsigned long pl_xchg(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock xchg %0,%1"
 		     : "=r" (x), "+m" (*ptr)
@@ -112,7 +112,7 @@ static inline unsigned long xchg(volatile unsigned long *ptr, unsigned long x)
 	return x;
 }
 
-static inline unsigned long cmpxchg(volatile unsigned long *ptr, unsigned long old, unsigned long new)
+static inline unsigned long pl_cmpxchg(volatile unsigned long *ptr, unsigned long old, unsigned long new)
 {
 	unsigned long ret;
 
@@ -127,20 +127,20 @@ static inline unsigned long cmpxchg(volatile unsigned long *ptr, unsigned long o
 #elif defined(__x86_64__)
 /* x86 64 bits */
 
-static inline void cpu_relax()
+static inline void pl_cpu_relax()
 {
 	asm volatile("rep;nop\n" ::: "memory");
 }
 
-static inline void cpu_relax_long(unsigned long cycles)
+static inline void pl_cpu_relax_long(unsigned long cycles)
 {
 	do {
-		cpu_relax();
+		pl_cpu_relax();
 	} while (--cycles);
 }
 
 /* increment value and return non-zero if result is non-null */
-static inline unsigned char atomic_inc(volatile unsigned long *ptr)
+static inline unsigned char pl_inc(volatile unsigned long *ptr)
 {
 	unsigned char ret;
 	asm volatile("lock incq %0\n"
@@ -152,7 +152,7 @@ static inline unsigned char atomic_inc(volatile unsigned long *ptr)
 }
 
 /* decrement value and return non-zero if result is non-null */
-static inline unsigned char atomic_dec(volatile unsigned long *ptr)
+static inline unsigned char pl_dec(volatile unsigned long *ptr)
 {
 	unsigned char ret;
 	asm volatile("lock decq %0\n"
@@ -164,18 +164,18 @@ static inline unsigned char atomic_dec(volatile unsigned long *ptr)
 }
 
 /* increment bit value */
-static inline void atomic_inc_noret(volatile unsigned long *ptr)
+static inline void pl_inc_noret(volatile unsigned long *ptr)
 {
 	asm volatile("lock incq %0\n" : "+m" (*ptr) :: "memory");
 }
 
 /* decrement bit value */
-static inline void atomic_dec_noret(volatile unsigned long *ptr)
+static inline void pl_dec_noret(volatile unsigned long *ptr)
 {
 	asm volatile("lock decq %0\n" : "+m" (*ptr) :: "memory");
 }
 
-static inline void atomic_add(volatile unsigned long *ptr, unsigned long x)
+static inline void pl_add(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock addq %1, %0\n"
 		     : "+m" (*ptr)
@@ -183,7 +183,7 @@ static inline void atomic_add(volatile unsigned long *ptr, unsigned long x)
 		     : "memory");
 }
 
-static inline void atomic_sub(volatile unsigned long *ptr, unsigned long x)
+static inline void pl_sub(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock subq %1, %0\n"
 		     : "+m" (*ptr)
@@ -191,7 +191,7 @@ static inline void atomic_sub(volatile unsigned long *ptr, unsigned long x)
 		     : "memory");
 }
 
-static inline void atomic_and(volatile unsigned long *ptr, unsigned long x)
+static inline void pl_and(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock andq %1, %0\n"
 		     : "+m" (*ptr)
@@ -200,7 +200,7 @@ static inline void atomic_and(volatile unsigned long *ptr, unsigned long x)
 }
 
 /* test and set a bit. Previous value is returned as 0 (not set) or -1 (set). */
-static inline unsigned long atomic_bts(volatile unsigned long *ptr, const unsigned long bit)
+static inline unsigned long pl_bts(volatile unsigned long *ptr, const unsigned long bit)
 {
 	unsigned long ret;
 	asm volatile("lock btsq %2, %0\n\t"
@@ -212,7 +212,7 @@ static inline unsigned long atomic_bts(volatile unsigned long *ptr, const unsign
 }
 
 /* temp = x; x = *ptr ; *ptr += temp */
-static inline unsigned long xadd(volatile unsigned long *ptr, unsigned long x)
+static inline unsigned long pl_xadd(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock xaddq %0, %1\n"
 		     :  "=r" (x), "+m" (*ptr)
@@ -222,7 +222,7 @@ static inline unsigned long xadd(volatile unsigned long *ptr, unsigned long x)
 }
 
 /* exchange <x> with <*ptr> and return previous contents of <*ptr> */
-static inline unsigned long xchg(volatile unsigned long *ptr, unsigned long x)
+static inline unsigned long pl_xchg(volatile unsigned long *ptr, unsigned long x)
 {
 	asm volatile("lock xchg %0,%1"
 		     : "=r" (x), "+m" (*ptr)
@@ -231,7 +231,7 @@ static inline unsigned long xchg(volatile unsigned long *ptr, unsigned long x)
 	return x;
 }
 
-static inline unsigned long cmpxchg(volatile unsigned long *ptr, unsigned long old, unsigned long new)
+static inline unsigned long pl_cmpxchg(volatile unsigned long *ptr, unsigned long old, unsigned long new)
 {
 	unsigned long ret;
 
@@ -245,4 +245,4 @@ static inline unsigned long cmpxchg(volatile unsigned long *ptr, unsigned long o
 #endif
 /* TODO: atomic ops on pointers (eg: lock xadd without length suffix) */
 
-#endif /* ATOMIC_OPS_H */
+#endif /* PL_ATOMIC_OPS_H */

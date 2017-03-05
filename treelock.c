@@ -58,7 +58,7 @@ void oneatwork(int thr)
 	}
 
 	/* step 1 : waiting for signal to start */
-	atomic_inc_noret(&actthreads);
+	pl_inc_noret(&actthreads);
 	while (step == 1);
 
 	/* step 2 : running */
@@ -85,8 +85,8 @@ void oneatwork(int thr)
 
 		loops++;
 		if (!(loops & 0x7F)) {	/* don't access RAM too often */
-			if (xadd(&global_work, 128) >= 20000000) {
-				if (xadd(&step, 1) == 2) { /* only take the first to end */
+			if (pl_xadd(&global_work, 128) >= 20000000) {
+				if (pl_xadd(&step, 1) == 2) { /* only take the first to end */
 					final_work = global_work;
 					gettimeofday(&stop, NULL);
 				}
@@ -94,7 +94,7 @@ void oneatwork(int thr)
 			}
 		}
 	}
-	atomic_dec_noret(&actthreads);
+	pl_dec_noret(&actthreads);
 	//fprintf(stderr, "actthreads=%d\n", actthreads);
 	pthread_exit(0);
 }
@@ -163,12 +163,12 @@ int main(int argc, char **argv)
 		pthread_detach(thr[u]);
 	}
 	
-	atomic_inc_noret(&step);  /* let the threads warm up and get ready to start */
+	pl_inc_noret(&step);  /* let the threads warm up and get ready to start */
 
 	while (actthreads != nbthreads);
 
 	gettimeofday(&start, NULL);
-	atomic_inc_noret(&step); /* fire ! */
+	pl_inc_noret(&step); /* fire ! */
 
 	while (actthreads)
 		usleep(100000);

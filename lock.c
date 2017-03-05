@@ -83,8 +83,8 @@
 static inline
 void take_rd(volatile unsigned long *lock)
 {
-	while (__builtin_expect(xadd(lock, RL_1) & WL_ANY, 0)) {
-		atomic_sub(lock, RL_1);
+	while (__builtin_expect(pl_xadd(lock, RL_1) & WL_ANY, 0)) {
+		pl_sub(lock, RL_1);
 		while (*lock & WL_ANY);
 	}
 }
@@ -92,17 +92,17 @@ void take_rd(volatile unsigned long *lock)
 static inline
 void drop_rd(volatile unsigned long *lock)
 {
-	atomic_sub(lock, RL_1);
+	pl_sub(lock, RL_1);
 }
 
 /* request a frozen read access (shared for reads only) */
 static inline
 void take_fr(volatile unsigned long *lock)
 {
-	while (__builtin_expect(xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY), 0)) {
-		atomic_sub(lock, FL_1 | RL_1);
+	while (__builtin_expect(pl_xadd(lock, FL_1 | RL_1) & (WL_ANY | FL_ANY), 0)) {
+		pl_sub(lock, FL_1 | RL_1);
 		do {
-			cpu_relax_long(4);
+			pl_cpu_relax_long(4);
 		} while (*lock & (WL_ANY | FL_ANY));
 	}
 }
@@ -110,7 +110,7 @@ void take_fr(volatile unsigned long *lock)
 static inline
 void drop_fr(volatile unsigned long *lock)
 {
-	atomic_sub(lock, FL_1 | RL_1);
+	pl_sub(lock, FL_1 | RL_1);
 }
 
 /* take the WR lock under the FR lock */
@@ -119,7 +119,7 @@ void take_wr(volatile unsigned long *lock)
 {
 	unsigned long r;
 
-	r = xadd(lock, WL_1 - FL_1 - RL_1);
+	r = pl_xadd(lock, WL_1 - FL_1 - RL_1);
 	r -= RL_1; // subtract our own count
 	while (r & RL_ANY)
 		r = *lock;
@@ -129,7 +129,7 @@ void take_wr(volatile unsigned long *lock)
 static inline
 void drop_wr(volatile unsigned long *lock)
 {
-	atomic_sub(lock, WL_1 - FL_1 - RL_1);
+	pl_sub(lock, WL_1 - FL_1 - RL_1);
 }
 
 /* immediately take the WR lock from UL and wait for readers to leave */
@@ -138,9 +138,9 @@ void take_wx(volatile unsigned long *lock)
 {
 	unsigned long r;
 
-	while (__builtin_expect((r = xadd(lock, WL_1)) & WL_ANY, 0)) {
-		atomic_sub(lock, WL_1);
-		cpu_relax_long(5);
+	while (__builtin_expect((r = pl_xadd(lock, WL_1)) & WL_ANY, 0)) {
+		pl_sub(lock, WL_1);
+		pl_cpu_relax_long(5);
 	}
 
 	/* wait for readers to go */
@@ -152,7 +152,7 @@ void take_wx(volatile unsigned long *lock)
 static inline
 void drop_wx(volatile unsigned long *lock)
 {
-	atomic_sub(lock, WL_1);
+	pl_sub(lock, WL_1);
 }
 
 static inline
