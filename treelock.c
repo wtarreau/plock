@@ -26,7 +26,7 @@
 #include <string.h>
 
 #define main _main
-#include "lock.c"
+#include "plock.h"
 #undef main
 
 #define MAXTHREADS	64
