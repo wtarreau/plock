@@ -211,6 +211,11 @@ static inline unsigned long pl_bts(volatile unsigned long *ptr, const unsigned l
 	return ret;
 }
 
+/* For an unclear reason, gcc's __sync_fetch_and_add() implementation produces
+ * less optimal than hand-crafted asm code so let's implement here the
+ * operations we need for the most common archs.
+ */
+
 /* temp = x; x = *ptr ; *ptr += temp */
 static inline unsigned long pl_xadd(volatile unsigned long *ptr, unsigned long x)
 {
@@ -240,6 +245,56 @@ static inline unsigned long pl_cmpxchg(volatile unsigned long *ptr, unsigned lon
 		     : "r" (new), "0" (old)
 		     : "memory");
 	return ret;
+}
+
+#else
+/* generic implementations */
+
+static inline void pl_inc_noret(volatile unsigned long *ptr)
+{
+	__sync_add_and_fetch(ptr, 1);
+}
+
+static inline void pl_dec_noret(volatile unsigned long *ptr)
+{
+	__sync_sub_and_fetch(ptr, 1);
+}
+
+static inline unsigned long pl_inc(volatile unsigned long *ptr)
+{
+	return __sync_add_and_fetch(ptr, 1);
+}
+
+static inline unsigned long pl_dec(volatile unsigned long *ptr)
+{
+	return __sync_sub_and_fetch(ptr, 1);
+}
+
+static inline unsigned long pl_add(volatile unsigned long *ptr, unsigned long x)
+{
+	return __sync_add_and_fetch(ptr, x);
+}
+
+static inline unsigned long pl_sub(volatile unsigned long *ptr, unsigned long x)
+{
+	return __sync_sub_and_fetch(ptr, x);
+}
+
+static inline unsigned long pl_xadd(volatile unsigned long *ptr, unsigned long x)
+{
+	return __sync_fetch_and_add(ptr, x);
+}
+
+static inline void pl_cpu_relax()
+{
+	asm volatile("" ::: "memory");
+}
+
+static inline void pl_cpu_relax_long(unsigned long cycles)
+{
+	do {
+		pl_cpu_relax();
+	} while (--cycles);
 }
 
 #endif
