@@ -83,11 +83,9 @@
 static inline
 void take_rd(volatile unsigned long *lock)
 {
-	if (__builtin_expect(xadd(lock, RL_1) & WL_ANY, 0)) {
-		do {
-			atomic_sub(lock, RL_1);
-			while (*lock & WL_ANY);
-		} while (xadd(lock, RL_1) & WL_ANY);
+	while (__builtin_expect(xadd(lock, RL_1) & WL_ANY, 0)) {
+		atomic_sub(lock, RL_1);
+		while (*lock & WL_ANY);
 	}
 }
 
