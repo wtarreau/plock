@@ -72,12 +72,14 @@ void oneatwork(int thr)
 			ro_unlock(&global_lock);
 		} else {
 			/* attempt a write */
+			//take_wx(&global_lock);
 			mw_lock(&global_lock);
 			//wr_fast_lock(&global_lock); /* better than the 2-phase for short writes (eg: delete) */
 			for (i = 0; i < 190; i++);
 			wr_lock(&global_lock);
 			for (i = 0; i < 10; i++);
 			wr_unlock(&global_lock);
+			//drop_wx(&global_lock);
 		}
 		for (i = 0; i < 200; i++);
 
