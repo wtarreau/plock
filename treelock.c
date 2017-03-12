@@ -62,7 +62,7 @@ void oneatwork(int thr)
 	while (step == 1);
 
 	/* step 2 : running */
-	while (1) {
+	do {
 		volatile int i;
 
 		if ((loops & 0xFF) < read_ratio) {
@@ -82,19 +82,17 @@ void oneatwork(int thr)
 			//pl_drop_wx(&global_lock);
 			//pl_drop_rd(&global_lock);
 		}
+		/* simulate some real work */
 		for (i = 0; i < 400; i++);
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
 
-		loops++;
-		if (!(loops & 0x7F)) {	/* don't access RAM too often */
-			if (pl_xadd(&global_work, 128) >= 20000000) {
-				if (pl_xadd(&step, 1) == 2) { /* only take the first to end */
-					final_work = global_work;
-					gettimeofday(&stop, NULL);
-				}
-				break;
-			}
-		}
+	/* only time the first finishing thread */
+	if (pl_xadd(&step, 1) == 2) {
+		final_work = global_work;
+		gettimeofday(&stop, NULL);
 	}
+
 	pl_dec_noret(&actthreads);
 	//fprintf(stderr, "actthreads=%d\n", actthreads);
 	pthread_exit(0);
