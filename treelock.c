@@ -66,22 +66,23 @@ void oneatwork(int thr)
 		volatile int i;
 
 		if ((loops & 0xFF) < read_ratio) {
-			/* attempt a read, estimated to 200 cycles every 400 cycles */
-			ro_lock(&global_lock);
+			/* simulate a read */
+			pl_take_rd(&global_lock);
 			for (i = 0; i < 200; i++);
-			ro_unlock(&global_lock);
+			pl_drop_rd(&global_lock);
 		} else {
-			/* attempt a write */
-			//take_wx(&global_lock);
-			mw_lock(&global_lock);
-			//wr_fast_lock(&global_lock); /* better than the 2-phase for short writes (eg: delete) */
+			/* simulate a write */
+			//pl_take_rd(&global_lock);
+			pl_take_fr(&global_lock);
+			//pl_take_wx(&global_lock);
 			for (i = 0; i < 190; i++);
-			wr_lock(&global_lock);
+			pl_take_wr(&global_lock);
 			for (i = 0; i < 10; i++);
-			wr_unlock(&global_lock);
-			//drop_wx(&global_lock);
+			pl_drop_wx(&global_lock);
+			//pl_drop_wx(&global_lock);
+			//pl_drop_rd(&global_lock);
 		}
-		for (i = 0; i < 200; i++);
+		for (i = 0; i < 400; i++);
 
 		loops++;
 		if (!(loops & 0x7F)) {	/* don't access RAM too often */
