@@ -33,6 +33,7 @@
 
 pthread_t thr[MAXTHREADS];
 unsigned int nbthreads, do_lock, arg_wait;
+int mode = 0;
 int arg_nice;
 volatile unsigned long actthreads = 0;
 int read_ratio = 256;
@@ -44,11 +45,137 @@ static struct timeval start, stop;
 static unsigned long global_work;
 static unsigned long final_work;
 
+/* unlocked tree access */
+void loop_mode0(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			for (i = 0; i < 200; i++);
+		} else {
+			/* simulate a write */
+			for (i = 0; i < 190; i++);
+			for (i = 0; i < 10; i++);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
+
+/* rd-locked tree access */
+void loop_mode1(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			pl_take_rd(&global_lock);
+			for (i = 0; i < 200; i++);
+			pl_drop_rd(&global_lock);
+		} else {
+			/* simulate a write */
+			pl_take_rd(&global_lock);
+			for (i = 0; i < 190; i++);
+			for (i = 0; i < 10; i++);
+			pl_drop_rd(&global_lock);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
+
+/* rd-locked lookup, wr-locked write */
+void loop_mode2(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			pl_take_rd(&global_lock);
+			for (i = 0; i < 200; i++);
+			pl_drop_rd(&global_lock);
+		} else {
+			/* simulate a write */
+			pl_take_rd(&global_lock);
+			for (i = 0; i < 190; i++);
+			pl_drop_rd(&global_lock);
+			pl_take_wx(&global_lock);
+			for (i = 0; i < 10; i++);
+			pl_drop_wx(&global_lock);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
+
+/* fr-locked lookup, wr-locked write */
+void loop_mode3(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			pl_take_rd(&global_lock);
+			for (i = 0; i < 200; i++);
+			pl_drop_rd(&global_lock);
+		} else {
+			/* simulate a write */
+			pl_take_fr(&global_lock);
+			for (i = 0; i < 190; i++);
+			pl_take_wr(&global_lock);
+			for (i = 0; i < 10; i++);
+			pl_drop_wx(&global_lock);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
+
+/* wr-locked lookup, wr-locked write */
+void loop_mode4(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			pl_take_rd(&global_lock);
+			for (i = 0; i < 200; i++);
+			pl_drop_rd(&global_lock);
+		} else {
+			/* simulate a write */
+			pl_take_wx(&global_lock);
+			for (i = 0; i < 190; i++);
+			for (i = 0; i < 10; i++);
+			pl_drop_wx(&global_lock);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
 
 void oneatwork(int thr)
 {
-	int loops = 0;
-
 	(void)thr; /* to mark it used */
 
 	/* step 0: creating all threads */
@@ -62,30 +189,13 @@ void oneatwork(int thr)
 	while (step == 1);
 
 	/* step 2 : running */
-	do {
-		volatile int i;
-
-		if ((loops & 0xFF) < read_ratio) {
-			/* simulate a read */
-			pl_take_rd(&global_lock);
-			for (i = 0; i < 200; i++);
-			pl_drop_rd(&global_lock);
-		} else {
-			/* simulate a write */
-			//pl_take_rd(&global_lock);
-			pl_take_fr(&global_lock);
-			//pl_take_wx(&global_lock);
-			for (i = 0; i < 190; i++);
-			pl_take_wr(&global_lock);
-			for (i = 0; i < 10; i++);
-			pl_drop_wx(&global_lock);
-			//pl_drop_wx(&global_lock);
-			//pl_drop_rd(&global_lock);
-		}
-		/* simulate some real work */
-		for (i = 0; i < 400; i++);
-	} while ((++loops & 0x7f) || /* limit stress on global_work */
-	         pl_xadd(&global_work, 128) < 20000000);
+	switch(mode) {
+	case 0: loop_mode0(); break;
+	case 1: loop_mode1(); break;
+	case 2: loop_mode2(); break;
+	case 3: loop_mode3(); break;
+	case 4: loop_mode4(); break;
+	}
 
 	/* only time the first finishing thread */
 	if (pl_xadd(&step, 1) == 2) {
@@ -100,7 +210,14 @@ void oneatwork(int thr)
 
 void usage(int ret)
 {
-	printf("usage: idletime [-h] [-l] [-n nice] [-w wait_time] [-t threads] [-r read_ratio(0..256)]\n");
+	printf("usage: idletime [-h] [-l] [-n nice] [-w wait_time] [-t threads] [-r read_ratio(0..256)] [-m <0..4>]\n"
+	       "       modes (-m, default 0) :\n"
+	       "         0 : lockless\n"
+	       "         1 : rd-locked only\n"
+	       "         2 : rd-locked during lookup, wr-locked during write\n"
+	       "         3 : fr-locked during lookup, wr-locked during write\n"
+	       "         4 : wr-locked during lookup, wr-locked during write\n"
+	       "");
 	exit(ret);
 }
 
@@ -130,6 +247,11 @@ int main(int argc, char **argv)
 			if (--argc < 0)
 				usage(1);
 			arg_nice = atol(*++argv);
+		}
+		else if (!strcmp(*argv, "-m")) {
+			if (--argc < 0)
+				usage(1);
+			mode = atol(*++argv);
 		}
 		else if (!strcmp(*argv, "-r")) {
 			if (--argc < 0)
