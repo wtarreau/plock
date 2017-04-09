@@ -75,8 +75,8 @@
  *
  *   - UL<->RD : take_rd() / drop_rd()   (adds/subs RD)
  *   - UL<->SK : take_sk() / drop_sk()   (adds/subs SK+RD)
- *   - UL<->WR : take_wx() / drop_wx()   (adds/subs WR)
- *   - SK<->WR : take_wr() / drop_wr()   (adds/subs WR-SK-RD)
+ *   - UL<->WR : take_wx() / drop_wx()   (adds/subs WR+RD)
+ *   - SK<->WR : take_wr() / drop_wr()   (adds/subs WR-SK)
  *
  * With the two lowest bits remaining reserved for other usages (eg: ebtrees),
  * we can have this split :
@@ -157,16 +157,15 @@ static inline void pl_take_wr(volatile unsigned long *lock)
 {
 	unsigned long r;
 
-	r = pl_xadd(lock, PLOCK_WL_1 - PLOCK_SL_1 - PLOCK_RL_1);
-	r -= PLOCK_RL_1; // subtract our own count
-	while (r & PLOCK_RL_ANY)
+	r = pl_xadd(lock, PLOCK_WL_1 - PLOCK_SL_1);
+	while ((r & PLOCK_RL_ANY) != PLOCK_RL_1)
 		r = *lock;
 }
 
 /* drop the WR lock and go back to the SK lock */
 static inline void pl_drop_wr(volatile unsigned long *lock)
 {
-	pl_sub(lock, PLOCK_WL_1 - PLOCK_SL_1 - PLOCK_RL_1);
+	pl_sub(lock, PLOCK_WL_1 - PLOCK_SL_1);
 }
 
 /* immediately take the WR lock from UL and wait for readers to leave. */
@@ -174,19 +173,20 @@ static inline void pl_take_wx(volatile unsigned long *lock)
 {
 	unsigned long r;
 
-	while (__builtin_expect((r = pl_xadd(lock, PLOCK_WL_1)) &
+	while (__builtin_expect((r = pl_xadd(lock, PLOCK_WL_1 | PLOCK_RL_1)) &
 	                        PLOCK_WL_ANY, 0)) {
-		pl_sub(lock, PLOCK_WL_1);
+		pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
 		pl_cpu_relax_long(5);
 	}
 
 	/* wait for readers to leave, that also covers seekers */
-	while (r & PLOCK_RL_ANY)
+	r += PLOCK_RL_1; // count our own presence
+	while ((r & PLOCK_RL_ANY) != PLOCK_RL_1)
 		r = *lock;
 }
 
 /* drop the WR lock entirely */
 static inline void pl_drop_wx(volatile unsigned long *lock)
 {
-	pl_sub(lock, PLOCK_WL_1);
+	pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
 }
