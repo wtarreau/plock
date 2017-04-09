@@ -146,34 +146,34 @@ static inline void pl_drop_r(volatile unsigned long *lock)
 	pl_sub(lock, PLOCK_RL_1);
 }
 
-/* request a seek access and wait for it */
-static inline void pl_take_s(volatile unsigned long *lock)
-{
-	while (__builtin_expect(pl_xadd(lock, PLOCK_SL_1 | PLOCK_RL_1) &
-	                        (PLOCK_WL_ANY | PLOCK_SL_ANY), 0)) {
-		pl_sub(lock, PLOCK_SL_1 | PLOCK_RL_1);
-		do {
-			pl_cpu_relax_long(4);
-		} while (*lock & (PLOCK_WL_ANY | PLOCK_SL_ANY));
-	}
-}
-
 /* request a seek access, return non-zero on success, otherwise 0 */
-static inline unsigned long pl_try_s(volatile unsigned long *lock)
+static unsigned long pl_try_s(volatile unsigned long *lock)
 {
 	unsigned long ret;
 
-	ret  = pl_xadd(lock, PLOCK_SL_1 | PLOCK_RL_1);
-	ret &= (PLOCK_WL_ANY | PLOCK_SL_ANY);
-	if (ret)
+	ret = *lock;
+	if (__builtin_expect(ret & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0))
+		return !ret;
+
+	ret = pl_xadd(lock, PLOCK_SL_1 | PLOCK_RL_1) & (PLOCK_WL_ANY | PLOCK_SL_ANY);
+
+	if (__builtin_expect(ret, 0))
 		pl_sub(lock, PLOCK_SL_1 | PLOCK_RL_1);
 	return !ret;
 }
 
-static inline void pl_drop_s(volatile unsigned long *lock)
+/* request a seek access and wait for it */
+static void pl_take_s(volatile unsigned long *lock)
+{
+	while (!pl_try_s(lock));
+}
+
+/* release the seek access lock */
+static void pl_drop_s(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_SL_1 + PLOCK_RL_1);
 }
+
 
 /* take the WR lock under the SK lock */
 static inline void pl_stow(volatile unsigned long *lock)
