@@ -45,7 +45,7 @@ static struct timeval start, stop;
 static unsigned long global_work;
 static unsigned long final_work;
 
-/* unlocked tree access */
+/* read: U ; lookup : U ; write : U (reference only, not realistic) */
 void loop_mode0(void)
 {
 	int loops = 0;
@@ -67,7 +67,7 @@ void loop_mode0(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* R-locked tree access */
+/* read: R ; lookup : R ; write : R (reference only, not realistic) */
 void loop_mode1(void)
 {
 	int loops = 0;
@@ -93,7 +93,7 @@ void loop_mode1(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* R-locked lookup, X-locked write */
+/* read: S ; lookup : S ; write : W (typical of insert_unique) */
 void loop_mode2(void)
 {
 	int loops = 0;
@@ -102,17 +102,16 @@ void loop_mode2(void)
 	do {
 		if ((loops & 0xFF) < read_ratio) {
 			/* simulate a read */
-			pl_take_r(&global_lock);
+			pl_take_s(&global_lock);
 			for (i = 0; i < 200; i++);
-			pl_drop_r(&global_lock);
+			pl_drop_s(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_r(&global_lock);
+			pl_take_s(&global_lock);
 			for (i = 0; i < 190; i++);
-			pl_drop_r(&global_lock);
-			pl_take_x(&global_lock);
+			pl_stow(&global_lock);
 			for (i = 0; i < 10; i++);
-			pl_drop_x(&global_lock);
+			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 400; i++);
@@ -121,7 +120,7 @@ void loop_mode2(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* S-locked lookup, W-locked write */
+/* read: R ; lookup : S ; write : W (typical of lookup+insert) */
 void loop_mode3(void)
 {
 	int loops = 0;
@@ -148,8 +147,34 @@ void loop_mode3(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* X-locked lookup, X-locked write */
+/* read: X ; lookup : X ; write : X (ext-locked insert_unique) */
 void loop_mode4(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			pl_take_x(&global_lock);
+			for (i = 0; i < 200; i++);
+			pl_drop_x(&global_lock);
+		} else {
+			/* simulate a write */
+			pl_take_x(&global_lock);
+			for (i = 0; i < 190; i++);
+			for (i = 0; i < 10; i++);
+			pl_drop_x(&global_lock);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
+
+/* read: R ; lookup : X ; write : X (ext-locked lookup+insert) */
+void loop_mode5(void)
 {
 	int loops = 0;
 	volatile int i;
@@ -174,8 +199,8 @@ void loop_mode4(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* R-locked lookup, A-locked write */
-void loop_mode5(void)
+/* read: R ; lookup : R ; write : A (typical of atomic pick) */
+void loop_mode6(void)
 {
 	int loops = 0;
 	volatile int i;
@@ -208,8 +233,8 @@ void loop_mode5(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* A-locked lookup, A-locked write */
-void loop_mode6(void)
+/* read: R ; lookup : A ; write : A (typical of insert+delete) */
+void loop_mode7(void)
 {
 	int loops = 0;
 	volatile int i;
@@ -235,7 +260,7 @@ void loop_mode6(void)
 }
 
 /* R-locked lookup, F then W-locked write */
-void loop_mode7(void)
+void loop_mode8(void)
 {
 	int loops = 0;
 	volatile int i;
@@ -294,6 +319,7 @@ void oneatwork(int thr)
 	case 5: loop_mode5(); break;
 	case 6: loop_mode6(); break;
 	case 7: loop_mode7(); break;
+	case 8: loop_mode8(); break;
 	}
 
 	/* only time the first finishing thread */
@@ -309,16 +335,17 @@ void oneatwork(int thr)
 
 void usage(int ret)
 {
-	printf("usage: treelock [-h] [-l] [-n nice] [-t threads] [-r read_ratio(0..256)] [-m <0..7>]\n"
+	printf("usage: treelock [-h] [-l] [-n nice] [-t threads] [-r read_ratio(0..256)] [-m <0..8>]\n"
 	       "       modes (-m, default 0) :\n"
-	       "         0 : lockless\n"
-	       "         1 : R-locked only\n"
-	       "         2 : R-locked during lookup, X-locked during write (not atomic)\n"
-	       "         3 : S-locked during lookup, W-locked during write\n"
-	       "         4 : X-locked during lookup, X-locked during write\n"
-	       "         5 : R-locked during lookup, A-locked during write\n"
-	       "         6 : A-locked during lookup, A-locked during write\n"
-	       "         7 : R-locked during lookup, W-locked during write via S (atomic)\n"
+	       "         0 : read: U ; lookup : U ; write : U (reference only, not realistic)\n"
+	       "         1 : read: R ; lookup : R ; write : R (reference only, not realistic)\n"
+	       "         2 : read: S ; lookup : S ; write : W (typical of insert_unique)\n"
+	       "         3 : read: R ; lookup : S ; write : W (typical of lookup+insert)\n"
+	       "         4 : read: X ; lookup : X ; write : X (ext-locked insert_unique)\n"
+	       "         5 : read: R ; lookup : X ; write : X (ext-locked lookup+insert)\n"
+	       "         6 : read: R ; lookup : R ; write : A (typical of atomic pick)\n"
+	       "         7 : read: R ; lookup : A ; write : A (typical of insert+delete)\n"
+	       "         8 : read: R ; lookup : R ; write : W (cache with high hit ratio)\n"
 	       "");
 	exit(ret);
 }
