@@ -177,8 +177,8 @@ static void pl_drop_s(volatile unsigned long *lock)
 }
 
 
-/* take the WR lock under the SK lock */
-static inline void pl_stow(volatile unsigned long *lock)
+/* take the W lock under the S lock */
+static void pl_stow(volatile unsigned long *lock)
 {
 	unsigned long r;
 
@@ -187,51 +187,44 @@ static inline void pl_stow(volatile unsigned long *lock)
 		r = *lock;
 }
 
-/* drop the WR lock and go back to the SK lock */
-static inline void pl_wtos(volatile unsigned long *lock)
+/* drop the W lock and go back to the S lock */
+static void pl_wtos(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1 - PLOCK_SL_1);
-}
-
-/* immediately take the WR lock from UL and wait for readers to leave. */
-static inline void pl_take_w(volatile unsigned long *lock)
-{
-	unsigned long r;
-
-	while (__builtin_expect((r = pl_xadd(lock, PLOCK_WL_1 | PLOCK_RL_1)) &
-	                        PLOCK_WL_ANY, 0)) {
-		pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
-		pl_cpu_relax_long(5);
-	}
-
-	/* wait for readers to leave, that also covers seekers */
-	r += PLOCK_RL_1; // count our own presence
-	while ((r & PLOCK_RL_ANY) != PLOCK_RL_1)
-		r = *lock;
 }
 
 /* try to grab the WR lock from UL then wait for readers to leave.
  * returns non-zero on success otherwise zero.
  */
-static inline unsigned long pl_try_w(volatile unsigned long *lock)
+static unsigned long pl_try_w(volatile unsigned long *lock)
 {
 	unsigned long r;
 
+	r = *lock;
+	if (__builtin_expect(r & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0))
+		return !r;
+
 	r = pl_xadd(lock, PLOCK_WL_1 | PLOCK_RL_1);
-	if (r & PLOCK_WL_ANY) {
+	if (__builtin_expect(r & PLOCK_WL_ANY, 0)) {
 		pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
-		return 0;
+		return !r;
 	}
 
 	/* wait for readers to leave, that also covers seekers */
-	r += PLOCK_RL_1; // count our own presence
-	while ((r & PLOCK_RL_ANY) != PLOCK_RL_1)
-		r = *lock;
-	return r;
+	while (__builtin_expect(r &= PLOCK_RL_ANY, 0))
+		r = *lock - PLOCK_RL_1;
+
+	return !r;
+}
+
+/* immediately take the WR lock from UL and wait for readers to leave. */
+static void pl_take_w(volatile unsigned long *lock)
+{
+	while (!pl_try_w(lock));
 }
 
 /* drop the WR lock entirely */
-static inline void pl_drop_w(volatile unsigned long *lock)
+static void pl_drop_w(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
 }
