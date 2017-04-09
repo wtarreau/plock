@@ -120,7 +120,7 @@
 #endif
 
 
-/* request shared read access */
+/* request shared read access and wait for it */
 static inline void pl_take_r(volatile unsigned long *lock)
 {
 	while (__builtin_expect(pl_xadd(lock, PLOCK_RL_1) &
@@ -130,12 +130,23 @@ static inline void pl_take_r(volatile unsigned long *lock)
 	}
 }
 
+/* request shared read access, return non-zero on success, otherwise 0 */
+static inline long pl_try_r(volatile unsigned long *lock)
+{
+	unsigned long ret;
+
+	ret = pl_xadd(lock, PLOCK_RL_1) & PLOCK_WL_ANY;
+	if (ret)
+		pl_sub(lock, PLOCK_RL_1);
+	return !ret;
+}
+
 static inline void pl_drop_r(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_RL_1);
 }
 
-/* request a seek access (shared for reads only) */
+/* request a seek access and wait for it */
 static inline void pl_take_s(volatile unsigned long *lock)
 {
 	while (__builtin_expect(pl_xadd(lock, PLOCK_SL_1 | PLOCK_RL_1) &
@@ -145,6 +156,18 @@ static inline void pl_take_s(volatile unsigned long *lock)
 			pl_cpu_relax_long(4);
 		} while (*lock & (PLOCK_WL_ANY | PLOCK_SL_ANY));
 	}
+}
+
+/* request a seek access, return non-zero on success, otherwise 0 */
+static inline unsigned long pl_try_s(volatile unsigned long *lock)
+{
+	unsigned long ret;
+
+	ret  = pl_xadd(lock, PLOCK_SL_1 | PLOCK_RL_1);
+	ret &= (PLOCK_WL_ANY | PLOCK_SL_ANY);
+	if (ret)
+		pl_sub(lock, PLOCK_SL_1 | PLOCK_RL_1);
+	return !ret;
 }
 
 static inline void pl_drop_s(volatile unsigned long *lock)
@@ -183,6 +206,26 @@ static inline void pl_take_w(volatile unsigned long *lock)
 	r += PLOCK_RL_1; // count our own presence
 	while ((r & PLOCK_RL_ANY) != PLOCK_RL_1)
 		r = *lock;
+}
+
+/* try to grab the WR lock from UL then wait for readers to leave.
+ * returns non-zero on success otherwise zero.
+ */
+static inline unsigned long pl_try_w(volatile unsigned long *lock)
+{
+	unsigned long r;
+
+	r = pl_xadd(lock, PLOCK_WL_1 | PLOCK_RL_1);
+	if (r & PLOCK_WL_ANY) {
+		pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
+		return 0;
+	}
+
+	/* wait for readers to leave, that also covers seekers */
+	r += PLOCK_RL_1; // count our own presence
+	while ((r & PLOCK_RL_ANY) != PLOCK_RL_1)
+		r = *lock;
+	return r;
 }
 
 /* drop the WR lock entirely */
