@@ -121,7 +121,7 @@ void loop_mode2(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* fr-locked lookup, wr-locked write */
+/* sk-locked lookup, wr-locked write */
 void loop_mode3(void)
 {
 	int loops = 0;
@@ -135,7 +135,7 @@ void loop_mode3(void)
 			pl_drop_rd(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_fr(&global_lock);
+			pl_take_sk(&global_lock);
 			for (i = 0; i < 190; i++);
 			pl_take_wr(&global_lock);
 			for (i = 0; i < 10; i++);
@@ -215,7 +215,7 @@ void usage(int ret)
 	       "         0 : lockless\n"
 	       "         1 : rd-locked only\n"
 	       "         2 : rd-locked during lookup, wr-locked during write\n"
-	       "         3 : fr-locked during lookup, wr-locked during write\n"
+	       "         3 : sk-locked during lookup, wr-locked during write\n"
 	       "         4 : wr-locked during lookup, wr-locked during write\n"
 	       "");
 	exit(ret);
