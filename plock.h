@@ -40,12 +40,13 @@
  * Principles of operations
  * ------------------------
  *
- * Locks have 4 states :
+ * Locks have 5 states :
  *
- *   - UL: unlocked      : nobody claims the lock
- *   - RD: read-locked   : some users are reading the shared resource
- *   - SK: seek-locked   : reading is OK but nobody else may seek nor write
- *   - WR: write-locked  : exclusive access for writing
+ *   - U: unlocked      : nobody claims the lock
+ *   - R: read-locked   : some users are reading the shared resource
+ *   - S: seek-locked   : reading is OK but nobody else may seek nor write
+ *   - W: write-locked  : exclusive access for writing after S
+ *   - X: exclusive     : immediate exclusive access
  *
  * The locks are implemented using cumulable bit fields representing from
  * the lowest to the highest bits :
@@ -64,19 +65,29 @@
  * A seek request also counts as a read request as technically it's a reader
  * which plans to write later.
  *
- * The SK lock cannot be taken if another SK or WR lock is already held. But
- * once the SK lock is held, the owner is automatically granted the right to
- * upgrade it to WR without checking. And it can take and release the WR lock
- * multiple times atomically if needed. It must only wait for last readers to
- * leave.
+ * The S lock cannot be taken if another S or W lock is already held. But once
+ * once the S lock is held, the owner is automatically granted the right to
+ * upgrade it to W without checking for other writers. And it can take and
+ * release the W lock multiple times atomically if needed. It must only wait
+ * for last readers to leave. The X lock is a combination of R and W locks
+ * that can immediately be granted from the unlocked state. It differs from
+ * the W lock in that it will be weaker than atomic locks.
+ *
+ * In terms of representation, we have this :
+ *   - R lock is made of the R bit
+ *   - S lock is made of R + S bits
+ *   - W lock is made of R + W + S bits
+ *   - X lock is made of R + W bits
  *
  * The lock can be upgraded between various states at the demand of the
  * requester :
  *
- *   - UL<->RD : take_r() / drop_r()   (adds/subs RD)
- *   - UL<->SK : take_s() / drop_s()   (adds/subs SK+RD)
- *   - UL<->WR : take_w() / drop_w()   (adds/subs WR+RD)
- *   - SK<->WR : stow()   / wtos()     (adds/subs WR-SK)
+ *   - U<->R : pl_take_r() / pl_drop_r()   (adds/subs R)
+ *   - U<->S : pl_take_s() / pl_drop_s()   (adds/subs S+R)
+ *   - U<->X : pl_take_x() / pl_drop_x()   (adds/subs W+R)
+ *   - S<->W : pl_stow()   / pl_wtos()     (adds/subs W)
+ *
+ * Other transitions are permitted in opportunistic mode.
  *
  * With the two lowest bits remaining reserved for other usages (eg: ebtrees),
  * we can have this split :
@@ -120,7 +131,7 @@
 #endif
 
 
-/* request shared read access, return non-zero on success, otherwise 0 */
+/* request shared read access (R), return non-zero on success, otherwise 0 */
 static unsigned long pl_try_r(volatile unsigned long *lock)
 {
 	unsigned long ret;
@@ -136,19 +147,19 @@ static unsigned long pl_try_r(volatile unsigned long *lock)
 	return !ret;
 }
 
-/* request shared read access and wait for it */
+/* request shared read access (R) and wait for it */
 static void pl_take_r(volatile unsigned long *lock)
 {
 	while (!pl_try_r(lock));
 }
 
-/* release the read access lock */
+/* release the read access (R) lock */
 static void pl_drop_r(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_RL_1);
 }
 
-/* request a seek access, return non-zero on success, otherwise 0 */
+/* request a seek access (S), return non-zero on success, otherwise 0 */
 static unsigned long pl_try_s(volatile unsigned long *lock)
 {
 	unsigned long ret;
@@ -164,13 +175,13 @@ static unsigned long pl_try_s(volatile unsigned long *lock)
 	return !ret;
 }
 
-/* request a seek access and wait for it */
+/* request a seek access (S) and wait for it */
 static void pl_take_s(volatile unsigned long *lock)
 {
 	while (!pl_try_s(lock));
 }
 
-/* release the seek access lock */
+/* release the seek access (S) lock */
 static void pl_drop_s(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_SL_1 + PLOCK_RL_1);
@@ -193,10 +204,16 @@ static void pl_wtos(volatile unsigned long *lock)
 	pl_sub(lock, PLOCK_WL_1 - PLOCK_SL_1);
 }
 
-/* try to grab the WR lock from UL then wait for readers to leave.
+/* drop the write (W) lock entirely */
+static void pl_drop_w(volatile unsigned long *lock)
+{
+	pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
+}
+
+/* try to grab the exclusive (X) lock from U then wait for readers to leave.
  * returns non-zero on success otherwise zero.
  */
-static unsigned long pl_try_w(volatile unsigned long *lock)
+static unsigned long pl_try_x(volatile unsigned long *lock)
 {
 	unsigned long r;
 
@@ -205,7 +222,8 @@ static unsigned long pl_try_w(volatile unsigned long *lock)
 		return !r;
 
 	r = pl_xadd(lock, PLOCK_WL_1 | PLOCK_RL_1);
-	if (__builtin_expect(r & PLOCK_WL_ANY, 0)) {
+
+	if (__builtin_expect(r & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0)) {
 		pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
 		return !r;
 	}
@@ -217,14 +235,16 @@ static unsigned long pl_try_w(volatile unsigned long *lock)
 	return !r;
 }
 
-/* immediately take the WR lock from UL and wait for readers to leave. */
-static void pl_take_w(volatile unsigned long *lock)
+/* immediately take the exclusive (X) lock from U and wait for readers to
+ * leave.
+ */
+static void pl_take_x(volatile unsigned long *lock)
 {
-	while (!pl_try_w(lock));
+	while (!pl_try_x(lock));
 }
 
-/* drop the WR lock entirely */
-static void pl_drop_w(volatile unsigned long *lock)
+/* drop the exclusive (X) lock entirely */
+static void pl_drop_x(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
 }

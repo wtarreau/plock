@@ -110,9 +110,9 @@ void loop_mode2(void)
 			pl_take_r(&global_lock);
 			for (i = 0; i < 190; i++);
 			pl_drop_r(&global_lock);
-			pl_take_w(&global_lock);
+			pl_take_x(&global_lock);
 			for (i = 0; i < 10; i++);
-			pl_drop_w(&global_lock);
+			pl_drop_x(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 400; i++);
@@ -162,10 +162,10 @@ void loop_mode4(void)
 			pl_drop_r(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_w(&global_lock);
+			pl_take_x(&global_lock);
 			for (i = 0; i < 190; i++);
 			for (i = 0; i < 10; i++);
-			pl_drop_w(&global_lock);
+			pl_drop_x(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 400; i++);
