@@ -193,7 +193,7 @@ static void pl_stow(volatile unsigned long *lock)
 {
 	unsigned long r;
 
-	r = pl_xadd(lock, PLOCK_WL_1 - PLOCK_SL_1);
+	r = pl_xadd(lock, PLOCK_WL_1);
 	while ((r & PLOCK_RL_ANY) != PLOCK_RL_1)
 		r = *lock;
 }
@@ -201,13 +201,13 @@ static void pl_stow(volatile unsigned long *lock)
 /* drop the W lock and go back to the S lock */
 static void pl_wtos(volatile unsigned long *lock)
 {
-	pl_sub(lock, PLOCK_WL_1 - PLOCK_SL_1);
+	pl_sub(lock, PLOCK_WL_1);
 }
 
 /* drop the write (W) lock entirely */
 static void pl_drop_w(volatile unsigned long *lock)
 {
-	pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
+	pl_sub(lock, PLOCK_WL_1 | PLOCK_SL_1 | PLOCK_RL_1);
 }
 
 /* try to grab the exclusive (X) lock from U then wait for readers to leave.
