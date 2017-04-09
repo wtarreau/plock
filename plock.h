@@ -40,13 +40,14 @@
  * Principles of operations
  * ------------------------
  *
- * Locks have 5 states :
+ * Locks have 6 states :
  *
  *   - U: unlocked      : nobody claims the lock
  *   - R: read-locked   : some users are reading the shared resource
  *   - S: seek-locked   : reading is OK but nobody else may seek nor write
  *   - W: write-locked  : exclusive access for writing after S
  *   - X: exclusive     : immediate exclusive access
+ *   - A: atomic        : some atomic updates are being performed
  *
  * The locks are implemented using cumulable bit fields representing from
  * the lowest to the highest bits :
@@ -71,23 +72,27 @@
  * release the W lock multiple times atomically if needed. It must only wait
  * for last readers to leave. The X lock is a combination of R and W locks
  * that can immediately be granted from the unlocked state. It differs from
- * the W lock in that it will be weaker than atomic locks.
+ * the W lock in that it will be weaker than atomic locks. The A lock supports
+ * concurrent write accesses. For this reason it doesn't check for the W bits,
+ * but it has to respect the S lock which is a promise of upgradability.
  *
  * In terms of representation, we have this :
  *   - R lock is made of the R bit
  *   - S lock is made of R + S bits
  *   - W lock is made of R + W + S bits
  *   - X lock is made of R + W bits
+ *   - A lock is made of W bits only
  *
  * The lock can be upgraded between various states at the demand of the
  * requester :
  *
+ *   - U<->A : pl_take_a() / pl_drop_a()   (adds/subs W)
  *   - U<->R : pl_take_r() / pl_drop_r()   (adds/subs R)
  *   - U<->S : pl_take_s() / pl_drop_s()   (adds/subs S+R)
  *   - U<->X : pl_take_x() / pl_drop_x()   (adds/subs W+R)
  *   - S<->W : pl_stow()   / pl_wtos()     (adds/subs W)
  *
- * Other transitions are permitted in opportunistic mode.
+ * Other transitions are permitted in opportunistic mode, such as R to A.
  *
  * With the two lowest bits remaining reserved for other usages (eg: ebtrees),
  * we can have this split :
@@ -223,14 +228,28 @@ static unsigned long pl_try_x(volatile unsigned long *lock)
 
 	r = pl_xadd(lock, PLOCK_WL_1 | PLOCK_RL_1);
 
-	if (__builtin_expect(r & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0)) {
-		pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
-		return !r;
-	}
+	while (1) {
+		/* Now it's getting tricky. We want to abort if we detect
+		 * another writer or seeker. We also have to abort if a reader
+		 * turns into an atomic writer, since there's no way to
+		 * distinguish between a combination of atomic writers and
+		 * readers and a concurrent exclusive access. However we want
+		 * to wait for readers to see the W bit and leave, including
+		 * seekers. Here we have the risk that a read lock turns into
+		 * an atomic wite lock, so we must always watch the W bit after
+		 * a read check. Since the transition from R to A is atomic,
+		 * we're safe if we have neither R nor W in the same read.
+		 */
+		if (__builtin_expect(r & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0)) {
+			pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
+			return !r;
+		}
 
-	/* wait for readers to leave, that also covers seekers */
-	while (__builtin_expect(r &= PLOCK_RL_ANY, 0))
-		r = *lock - PLOCK_RL_1;
+		if (__builtin_expect(r &= PLOCK_RL_ANY, 0) == 0)
+			break;
+
+		r = *lock - PLOCK_WL_1 - PLOCK_RL_1;
+	}
 
 	return !r;
 }
@@ -247,4 +266,81 @@ static void pl_take_x(volatile unsigned long *lock)
 static void pl_drop_x(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
+}
+
+/* request atomic write access (A), return non-zero on success, otherwise 0 */
+static unsigned long pl_try_a(volatile unsigned long *lock)
+{
+	unsigned long ret;
+
+	ret = *lock & PLOCK_SL_ANY;
+	if (__builtin_expect(ret, 0))
+		return !ret;
+
+	ret = pl_xadd(lock, PLOCK_WL_1);
+
+	while (1) {
+		/* we have to give up if an S lock appears. It's possible that
+		 * such a lock stayed hidden in the W bits after an overflow,
+		 * but in this case R is still held, ensuring we loop back here
+		 * until we discover the conflict. We only return successfully
+		 * once all readers are gone (or converted to A).
+		 */
+		if (__builtin_expect(ret & PLOCK_SL_ANY, 0)) {
+			pl_sub(lock, PLOCK_WL_1);
+			return !ret;
+		}
+
+		ret &= PLOCK_RL_ANY;
+		if (__builtin_expect(ret, 0) == 0)
+			break;
+		ret = *lock;
+	}
+
+	return !ret;
+}
+
+/* request atomic write access (A) and wait for it */
+static void pl_take_a(volatile unsigned long *lock)
+{
+	while (!pl_try_a(lock));
+}
+
+/* release atomc write access (A) lock */
+static void pl_drop_a(volatile unsigned long *lock)
+{
+	pl_sub(lock, PLOCK_WL_1);
+}
+
+/* Try to upgrade from R to A, return non-zero on success, otherwise 0.
+ * This lock will fail if S is held or appears while waiting (typically due to
+ * a previous grab that was disguised as a W due to an overflow). In case of
+ * failure to grab the lock, it MUST NOT be retried without first dropping R,
+ * or it may never complete due to S waiting for R to leave before upgrading
+ * to W. The lock succeeds once there's no more R (ie all of them have either
+ * completed or were turned to A).
+ */
+static unsigned long pl_try_rtoa(volatile unsigned long *lock)
+{
+	unsigned long ret;
+
+	ret = *lock & PLOCK_SL_ANY;
+	if (__builtin_expect(ret, 0))
+		return !ret;
+
+	ret = pl_xadd(lock, PLOCK_WL_1 - PLOCK_RL_1);
+
+	while (1) {
+		if (__builtin_expect(ret & PLOCK_SL_ANY, 0)) {
+			pl_sub(lock, PLOCK_WL_1 - PLOCK_RL_1);
+			return !ret;
+		}
+
+		ret &= PLOCK_RL_ANY;
+		if (__builtin_expect(ret, 0) == 0)
+			break;
+		ret = *lock;
+	}
+
+	return !ret;
 }

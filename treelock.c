@@ -67,7 +67,7 @@ void loop_mode0(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* rd-locked tree access */
+/* R-locked tree access */
 void loop_mode1(void)
 {
 	int loops = 0;
@@ -93,7 +93,7 @@ void loop_mode1(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* rd-locked lookup, wr-locked write */
+/* R-locked lookup, X-locked write */
 void loop_mode2(void)
 {
 	int loops = 0;
@@ -121,7 +121,7 @@ void loop_mode2(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* sk-locked lookup, wr-locked write */
+/* S-locked lookup, W-locked write */
 void loop_mode3(void)
 {
 	int loops = 0;
@@ -148,7 +148,7 @@ void loop_mode3(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* wr-locked lookup, wr-locked write */
+/* X-locked lookup, X-locked write */
 void loop_mode4(void)
 {
 	int loops = 0;
@@ -166,6 +166,66 @@ void loop_mode4(void)
 			for (i = 0; i < 190; i++);
 			for (i = 0; i < 10; i++);
 			pl_drop_x(&global_lock);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
+
+/* R-locked lookup, A-locked write */
+void loop_mode5(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			pl_take_r(&global_lock);
+			for (i = 0; i < 200; i++);
+			pl_drop_r(&global_lock);
+		} else {
+			/* simulate a write */
+			while (1) {
+				/* if we fail the upgrade, we have to run
+				 * the lookup again.
+				 */
+				pl_take_r(&global_lock);
+				for (i = 0; i < 190; i++);
+				if (pl_try_rtoa(&global_lock))
+					break;
+				pl_drop_r(&global_lock);
+			}
+			for (i = 0; i < 10; i++);
+			pl_drop_a(&global_lock);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
+
+/* A-locked lookup, A-locked write */
+void loop_mode6(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			pl_take_r(&global_lock);
+			for (i = 0; i < 200; i++);
+			pl_drop_r(&global_lock);
+		} else {
+			/* simulate a write */
+			pl_take_a(&global_lock);
+			for (i = 0; i < 190; i++);
+			for (i = 0; i < 10; i++);
+			pl_drop_a(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 400; i++);
@@ -195,6 +255,8 @@ void oneatwork(int thr)
 	case 2: loop_mode2(); break;
 	case 3: loop_mode3(); break;
 	case 4: loop_mode4(); break;
+	case 5: loop_mode5(); break;
+	case 6: loop_mode6(); break;
 	}
 
 	/* only time the first finishing thread */
@@ -210,13 +272,15 @@ void oneatwork(int thr)
 
 void usage(int ret)
 {
-	printf("usage: idletime [-h] [-l] [-n nice] [-w wait_time] [-t threads] [-r read_ratio(0..256)] [-m <0..4>]\n"
+	printf("usage: treelock [-h] [-l] [-n nice] [-t threads] [-r read_ratio(0..256)] [-m <0..6>]\n"
 	       "       modes (-m, default 0) :\n"
 	       "         0 : lockless\n"
-	       "         1 : rd-locked only\n"
-	       "         2 : rd-locked during lookup, wr-locked during write\n"
-	       "         3 : sk-locked during lookup, wr-locked during write\n"
-	       "         4 : wr-locked during lookup, wr-locked during write\n"
+	       "         1 : R-locked only\n"
+	       "         2 : R-locked during lookup, X-locked during write (not atomic)\n"
+	       "         3 : S-locked during lookup, W-locked during write\n"
+	       "         4 : X-locked during lookup, X-locked during write\n"
+	       "         5 : R-locked during lookup, A-locked during write\n"
+	       "         6 : A-locked during lookup, A-locked during write\n"
 	       "");
 	exit(ret);
 }
