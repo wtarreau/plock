@@ -120,28 +120,30 @@
 #endif
 
 
-/* request shared read access and wait for it */
-static inline void pl_take_r(volatile unsigned long *lock)
-{
-	while (__builtin_expect(pl_xadd(lock, PLOCK_RL_1) &
-	                        PLOCK_WL_ANY, 0)) {
-		pl_sub(lock, PLOCK_RL_1);
-		while (*lock & PLOCK_WL_ANY);
-	}
-}
-
 /* request shared read access, return non-zero on success, otherwise 0 */
-static inline long pl_try_r(volatile unsigned long *lock)
+static unsigned long pl_try_r(volatile unsigned long *lock)
 {
 	unsigned long ret;
 
+	ret = *lock & PLOCK_WL_ANY;
+	if (__builtin_expect(ret, 0))
+		return !ret;
+
 	ret = pl_xadd(lock, PLOCK_RL_1) & PLOCK_WL_ANY;
-	if (ret)
+	if (__builtin_expect(ret, 0))
 		pl_sub(lock, PLOCK_RL_1);
+
 	return !ret;
 }
 
-static inline void pl_drop_r(volatile unsigned long *lock)
+/* request shared read access and wait for it */
+static void pl_take_r(volatile unsigned long *lock)
+{
+	while (!pl_try_r(lock));
+}
+
+/* release the read access lock */
+static void pl_drop_r(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_RL_1);
 }
