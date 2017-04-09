@@ -73,10 +73,10 @@
  * The lock can be upgraded between various states at the demand of the
  * requester :
  *
- *   - UL<->RD : take_rd() / drop_rd()   (adds/subs RD)
- *   - UL<->SK : take_sk() / drop_sk()   (adds/subs SK+RD)
- *   - UL<->WR : take_wx() / drop_wx()   (adds/subs WR+RD)
- *   - SK<->WR : take_wr() / drop_wr()   (adds/subs WR-SK)
+ *   - UL<->RD : take_r() / drop_r()   (adds/subs RD)
+ *   - UL<->SK : take_s() / drop_s()   (adds/subs SK+RD)
+ *   - UL<->WR : take_w() / drop_w()   (adds/subs WR+RD)
+ *   - SK<->WR : stow()   / wtos()     (adds/subs WR-SK)
  *
  * With the two lowest bits remaining reserved for other usages (eg: ebtrees),
  * we can have this split :
@@ -121,7 +121,7 @@
 
 
 /* request shared read access */
-static inline void pl_take_rd(volatile unsigned long *lock)
+static inline void pl_take_r(volatile unsigned long *lock)
 {
 	while (__builtin_expect(pl_xadd(lock, PLOCK_RL_1) &
 	                        PLOCK_WL_ANY, 0)) {
@@ -130,13 +130,13 @@ static inline void pl_take_rd(volatile unsigned long *lock)
 	}
 }
 
-static inline void pl_drop_rd(volatile unsigned long *lock)
+static inline void pl_drop_r(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_RL_1);
 }
 
 /* request a seek access (shared for reads only) */
-static inline void pl_take_sk(volatile unsigned long *lock)
+static inline void pl_take_s(volatile unsigned long *lock)
 {
 	while (__builtin_expect(pl_xadd(lock, PLOCK_SL_1 | PLOCK_RL_1) &
 	                        (PLOCK_WL_ANY | PLOCK_SL_ANY), 0)) {
@@ -147,13 +147,13 @@ static inline void pl_take_sk(volatile unsigned long *lock)
 	}
 }
 
-static inline void pl_drop_sk(volatile unsigned long *lock)
+static inline void pl_drop_s(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_SL_1 + PLOCK_RL_1);
 }
 
 /* take the WR lock under the SK lock */
-static inline void pl_take_wr(volatile unsigned long *lock)
+static inline void pl_stow(volatile unsigned long *lock)
 {
 	unsigned long r;
 
@@ -163,13 +163,13 @@ static inline void pl_take_wr(volatile unsigned long *lock)
 }
 
 /* drop the WR lock and go back to the SK lock */
-static inline void pl_drop_wr(volatile unsigned long *lock)
+static inline void pl_wtos(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1 - PLOCK_SL_1);
 }
 
 /* immediately take the WR lock from UL and wait for readers to leave. */
-static inline void pl_take_wx(volatile unsigned long *lock)
+static inline void pl_take_w(volatile unsigned long *lock)
 {
 	unsigned long r;
 
@@ -186,7 +186,7 @@ static inline void pl_take_wx(volatile unsigned long *lock)
 }
 
 /* drop the WR lock entirely */
-static inline void pl_drop_wx(volatile unsigned long *lock)
+static inline void pl_drop_w(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
 }

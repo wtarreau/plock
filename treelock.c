@@ -76,15 +76,15 @@ void loop_mode1(void)
 	do {
 		if ((loops & 0xFF) < read_ratio) {
 			/* simulate a read */
-			pl_take_rd(&global_lock);
+			pl_take_r(&global_lock);
 			for (i = 0; i < 200; i++);
-			pl_drop_rd(&global_lock);
+			pl_drop_r(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_rd(&global_lock);
+			pl_take_r(&global_lock);
 			for (i = 0; i < 190; i++);
 			for (i = 0; i < 10; i++);
-			pl_drop_rd(&global_lock);
+			pl_drop_r(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 400; i++);
@@ -102,17 +102,17 @@ void loop_mode2(void)
 	do {
 		if ((loops & 0xFF) < read_ratio) {
 			/* simulate a read */
-			pl_take_rd(&global_lock);
+			pl_take_r(&global_lock);
 			for (i = 0; i < 200; i++);
-			pl_drop_rd(&global_lock);
+			pl_drop_r(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_rd(&global_lock);
+			pl_take_r(&global_lock);
 			for (i = 0; i < 190; i++);
-			pl_drop_rd(&global_lock);
-			pl_take_wx(&global_lock);
+			pl_drop_r(&global_lock);
+			pl_take_w(&global_lock);
 			for (i = 0; i < 10; i++);
-			pl_drop_wx(&global_lock);
+			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 400; i++);
@@ -130,16 +130,16 @@ void loop_mode3(void)
 	do {
 		if ((loops & 0xFF) < read_ratio) {
 			/* simulate a read */
-			pl_take_rd(&global_lock);
+			pl_take_r(&global_lock);
 			for (i = 0; i < 200; i++);
-			pl_drop_rd(&global_lock);
+			pl_drop_r(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_sk(&global_lock);
+			pl_take_s(&global_lock);
 			for (i = 0; i < 190; i++);
-			pl_take_wr(&global_lock);
+			pl_stow(&global_lock);
 			for (i = 0; i < 10; i++);
-			pl_drop_wx(&global_lock);
+			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 400; i++);
@@ -157,15 +157,15 @@ void loop_mode4(void)
 	do {
 		if ((loops & 0xFF) < read_ratio) {
 			/* simulate a read */
-			pl_take_rd(&global_lock);
+			pl_take_r(&global_lock);
 			for (i = 0; i < 200; i++);
-			pl_drop_rd(&global_lock);
+			pl_drop_r(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_wx(&global_lock);
+			pl_take_w(&global_lock);
 			for (i = 0; i < 190; i++);
 			for (i = 0; i < 10; i++);
-			pl_drop_wx(&global_lock);
+			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 400; i++);
