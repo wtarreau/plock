@@ -209,6 +209,27 @@ static void pl_wtos(volatile unsigned long *lock)
 	pl_sub(lock, PLOCK_WL_1);
 }
 
+/* Try to upgrade from R to S, return non-zero on success, otherwise 0.
+ * This lock will fail if S or W are already held. In case of failure to grab
+ * the lock, it MUST NOT be retried without first dropping R, or it may never
+ * complete due to S waiting for R to leave before upgrading to W.
+ */
+static unsigned long pl_try_rtos(volatile unsigned long *lock)
+{
+	unsigned long ret;
+
+	ret = *lock;
+	if (__builtin_expect(ret & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0))
+		return !ret;
+
+	ret = pl_xadd(lock, PLOCK_SL_1) & (PLOCK_WL_ANY | PLOCK_SL_ANY);
+
+	if (__builtin_expect(ret, 0))
+		pl_sub(lock, PLOCK_SL_1);
+
+	return !ret;
+}
+
 /* drop the write (W) lock entirely */
 static void pl_drop_w(volatile unsigned long *lock)
 {

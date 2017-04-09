@@ -234,6 +234,42 @@ void loop_mode6(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
+/* R-locked lookup, F then W-locked write */
+void loop_mode7(void)
+{
+	int loops = 0;
+	volatile int i;
+
+	do {
+		if ((loops & 0xFF) < read_ratio) {
+			/* simulate a read */
+			pl_take_r(&global_lock);
+			for (i = 0; i < 200; i++);
+			pl_drop_r(&global_lock);
+		} else {
+			/* simulate a write */
+			while (1) {
+				/* if we fail the upgrade, we have to run
+				 * the lookup again.
+				 */
+				pl_take_r(&global_lock);
+				for (i = 0; i < 190; i++);
+				if (pl_try_rtos(&global_lock))
+					break;
+				pl_drop_r(&global_lock);
+			}
+			/* now we are S-locked */
+			pl_stow(&global_lock);
+			for (i = 0; i < 10; i++);
+			pl_drop_w(&global_lock);
+		}
+		/* simulate some real work */
+		for (i = 0; i < 400; i++);
+
+	} while ((++loops & 0x7f) || /* limit stress on global_work */
+	         pl_xadd(&global_work, 128) < 20000000);
+}
+
 void oneatwork(int thr)
 {
 	(void)thr; /* to mark it used */
@@ -257,6 +293,7 @@ void oneatwork(int thr)
 	case 4: loop_mode4(); break;
 	case 5: loop_mode5(); break;
 	case 6: loop_mode6(); break;
+	case 7: loop_mode7(); break;
 	}
 
 	/* only time the first finishing thread */
@@ -272,7 +309,7 @@ void oneatwork(int thr)
 
 void usage(int ret)
 {
-	printf("usage: treelock [-h] [-l] [-n nice] [-t threads] [-r read_ratio(0..256)] [-m <0..6>]\n"
+	printf("usage: treelock [-h] [-l] [-n nice] [-t threads] [-r read_ratio(0..256)] [-m <0..7>]\n"
 	       "       modes (-m, default 0) :\n"
 	       "         0 : lockless\n"
 	       "         1 : R-locked only\n"
@@ -281,6 +318,7 @@ void usage(int ret)
 	       "         4 : X-locked during lookup, X-locked during write\n"
 	       "         5 : R-locked during lookup, A-locked during write\n"
 	       "         6 : A-locked during lookup, A-locked during write\n"
+	       "         7 : R-locked during lookup, W-locked during write via S (atomic)\n"
 	       "");
 	exit(ret);
 }
