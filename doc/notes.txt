@@ -10,37 +10,106 @@ on a tree during write operations is expensive because most of the time is
 spent looking up the entry to modify and very little time is spent modifying
 the entry, so during this time no read operation may be performed.
 
-The "upgradable" lock tries to address this issue by having 4 levels of locking
+The "upgradable" lock tries to address this issue by having 5 levels of locking
 for a shared resource :
 
   - unlocked                (or UL)
   - read-only shared access (or RS for read shared)
-  - upgradable read access  (or MS for modify shared, indicating a write intent)
+  - seek access             (or MS for modify shared, indicating a write intent)
   - exclusive write access  (or WX for write exclusive)
+  - an atomic write access  (or WA for write atomic)
+
+The rights and expectations these locks impose to their users are the
+following :
+  - unlocked
+    - owner may not access the protected structure at all.
+    - owner may attempt to take any lock
+    - others may do what they want with it
+    - others may take any lock
+
+  - read-shared
+    - owner may read any location from the protected structure without any
+      requirement for ordering ;
+    - owner must wait for writers to leave before being granted the lock
+    - others may take a read lock or a modify-shared lock
+    - others may read any location from the protected structure without any
+      requirement for ordering ;
+    - others may take any form of write lock but will first have to wait for
+      readers to leave before proceeding with writes ;
+
+  - seek-shared
+    - owner may read any location from the protected structure without any
+      requirement for ordering ;
+    - owner must wait for writers and for other seekers to leave before being
+      granted the lock ;
+    - owner may upgrade the lock to a write lock at any instant without prior
+      notification ;
+    - owner must wait for readers to leave after the lock is upgraded before
+      performing any write ;
+    - owner may release the lock without performing an upgrade ;
+    - owner may also downgrade the lock to a read-shared lock ;
+    - others may take a read lock only
+    - others may read any location from the protected structure without any
+      requirement for ordering ;
+
+  - write-exclusive
+    - owner must wait for writers and for seekers to leave before being granted
+      the lock (this is guaranted when upgrading from seek-shared) ;
+    - owner must wait for readers to leave after the lock is granted before
+      performing any write ;
+    - owner may perform any modification to the protected structure ;
+    - owner may downgrade the lock to a modify-shared lock ;
+    - owner may downgrade the lock to a read-shared lock ;
+    - others may not take any lock ;
+    - others may not access the protected structure at all ;
+
+  - write-atomic
+    - owner must wait for writers and for seekers to leave before being
+      granted the lock, but doesn't exclude other write-atomic users ;
+    - owner must wait for readers to leave after the lock is granted before
+      performing any write ;
+    - owner must be very careful during reads so that any supported atomic
+      operation has no functional impact on its access (may detect the change
+      and perform a retry) ;
+    - owner may only carefully apply modifications to the protected structure
+      using atomic operations and memory barriers in a way that is compatible
+      with its own usage ;
+    - others may only hold the same write-atomic lock
+    - others may only carefully apply modifications to the protected structure
+      using atomic operations and memory barriers in a way that is compatible
+      with others' usage ;
+    - the protections involved with this type of lock are 100% application
+      specific. Most commonly this will be used to remove an element from a
+      list using atomic operations and all compatible functions will use this
+      lock instead of any of the 3 above.
 
 The upgradable read access is an intermediary state between the read only
-shared access and the write access. It is used only during the lookup phase
-necessary to perform some changes. It allows other regular readers to access
-the resource. Once the resource is located, it is turned into an exclusive
-write access, and once all readers are gone, the change can be performed.
-This type of lock is exclusive against itself, which means that it is not
-allowed for two writers to use this one at the same time (otherwise the
-structure of the tree may become inconsistent across the lock).
+shared access and the write access. It is used only during the seeking phase
+necessary to locate the place to perform some changes. It allows other regular
+readers to access the resource. Once the resource is located, it is turned into
+an exclusive write access, and once all readers are gone, the change can be
+performed. Due to its nature, this lock's "upgradability" is guaranted by
+design. This rule implies that this type of lock is exclusive against itself,
+which means that it is not allowed for two writers to use this one at the same
+time (otherwise the structure of the tree may become inconsistent across the
+lock).
 
 The compatiblity matrix looks like this for any two threads :
 
                       thread 1
 
-                | UL | RS | MS | WX
-           -----+----+----+----+-----
-             UL |  X |  X |  X |  X
-           -----+----+----+----+-----
-             RS |  X |  X |  X |
-  thread 2 -----+----+----+----+-----
-             MS |  X |  X |    |
-           -----+----+----+----+-----
-             WX |  X |    |    |
-           -----+----+----+----+-----
+                | UL | RS | MS | WX  | WA
+           -----+----+----+----+-----+-----
+             UL |  X |  X |  X |  X  |  X
+           -----+----+----+----+-----+-----
+             RS |  X |  X |  X |     |
+  thread 2 -----+----+----+----+-----+-----
+             MS |  X |  X |    |     |
+           -----+----+----+----+-----+-----
+             WX |  X |    |    |     |
+           -----+----+----+----+-----+-----
+             WA |  X |    |    |     |  X
+           -----+----+----+----+-----+-----
 
 
 Note: it's still hard to find short names which unambiguously match the various
@@ -51,10 +120,13 @@ Note: it's still hard to find short names which unambiguously match the various
         - the upgradable shared access may be qualified as "Write Traversal",
           "Write Lookup", "Write Request", "Shared Write", "Pending Write",
           "Write Intent", "Partially Locked", "Read Modify", "Modify Access",
-          "Limited Access", "Reserved Access" ;
+          "Limited Access", "Reserved Access", "Seek Access" ;
 
         - the exclusive write access may be qualified as "Exclusive Write",
           "Write Commit", "Write Access", "Exclusive Access", "Write Lock" ;
+
+        - the atomic write access may be qualified as "Delete", "Unlink",
+          "Shared Write" ;
 
 It could also be easier to consider states 0 to 3 for unlocked to exclusively
 locked.
@@ -68,8 +140,10 @@ as shown below :
     0 | 0 |>0 | Shared access
     0 | 1 |>1 | Limited access
     0 |>1 | X | Limited access, conflict (transient)
-    1 | 1 |>1 | Exclusive access requested
-    1 | 1 | 1 | Exclusive access granted
+    1 | 0 |>1 | Exclusive write access requested
+    1 | 0 | 1 | Exclusive write access granted
+    1 | 0 |>0 | Atomic write access requested
+    1 | 0 | 0 | Atomic write access granted
 
 
 Implementation
@@ -80,6 +154,7 @@ In terms of implementation, these states are turned into "no more XXX" bits :
   - RS = "no more writes"
   - MS = "no more modifications nor writes"
   - WX = "no more accesses"
+  - WA = "no more non-atomic accesses"
 
 Thus the resource is effectively locked in a given state after the condition
 is realized. So there is always a transition period between one state and
@@ -98,8 +173,8 @@ some atomic sequences of operations :
    }
 
    lock_wx() {
-      wait_for_no_more_access();
       inc_modifier_count();
+      wait_for_no_more_access();
    }
 
 These operations can be performed using atomic additions into a single integer
