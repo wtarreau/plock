@@ -280,7 +280,12 @@ static unsigned long pl_try_x(volatile unsigned long *lock)
  */
 static void pl_take_x(volatile unsigned long *lock)
 {
-	while (!pl_try_x(lock));
+	if (pl_try_x(lock))
+		return;
+
+	do {
+		pl_cpu_relax();
+	} while (!pl_try_x(lock));
 }
 
 /* drop the exclusive (X) lock entirely */
