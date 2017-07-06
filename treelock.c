@@ -61,7 +61,7 @@ void loop_mode0(void)
 			for (i = 0; i < 10; i++);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
@@ -87,7 +87,7 @@ void loop_mode1(void)
 			pl_drop_r(&global_lock);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
@@ -114,7 +114,7 @@ void loop_mode2(void)
 			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
@@ -141,7 +141,7 @@ void loop_mode3(void)
 			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
@@ -167,7 +167,7 @@ void loop_mode4(void)
 			pl_drop_x(&global_lock);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
@@ -193,7 +193,7 @@ void loop_mode5(void)
 			pl_drop_x(&global_lock);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
@@ -227,7 +227,7 @@ void loop_mode6(void)
 			pl_drop_a(&global_lock);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
@@ -253,7 +253,7 @@ void loop_mode7(void)
 			pl_drop_a(&global_lock);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
@@ -289,7 +289,7 @@ void loop_mode8(void)
 			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
-		for (i = 0; i < 400; i++);
+		for (i = 0; i < 100; i++);
 
 	} while ((++loops & 0x7f) || /* limit stress on global_work */
 	         pl_xadd(&global_work, 128) < 20000000);
