@@ -209,6 +209,60 @@ static void pl_wtos(volatile unsigned long *lock)
 	pl_sub(lock, PLOCK_WL_1);
 }
 
+/* request a write access (W), return non-zero on success, otherwise 0 */
+static unsigned long pl_try_w(volatile unsigned long *lock)
+{
+	unsigned long ret;
+
+	ret = *lock;
+	if (__builtin_expect(ret & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0))
+		return !ret;
+
+	/* Below there is something important : by taking both W and S, we will
+	 * cause an overflow of W at 4/5 of the maximum value that can be stored
+	 * into W due to the fact that S is 2 bits, so we're effectively adding
+	 * 5 to the word composed by W:S. But for all words multiple of 4 bits,
+	 * the maximum value is multiple of 15 thus of 5. So the largest value
+	 * we can store with all bits set to one will be met by adding 5, and
+	 * then adding 5 again will place value 1 in W and value 0 in S, so we
+	 * never leave W with 0. Also, even upon such an overflow, there's no
+	 * risk to confuse it with an atomic lock because R is not null since
+	 * it will not have overflown. For 32-bit locks, this situation happens
+	 * when exactly 13108 threads try to grab the lock at once, W=1, S=0 and
+	 * R=13108. For 64-bit locks, it happens at 858993460 concurrent writers
+	 * where W=1, S=0 and R=858993460.
+	 */
+	ret = pl_xadd(lock, PLOCK_WL_1 | PLOCK_SL_1 | PLOCK_RL_1);
+
+	/* a writer, seeker or atomic is present, let's leave */
+	if (__builtin_expect(ret & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0)) {
+		pl_sub(lock, PLOCK_WL_1 | PLOCK_SL_1 | PLOCK_RL_1);
+		return !(ret & (PLOCK_WL_ANY | PLOCK_SL_ANY)); // always 0
+	}
+
+	/* wait for all other readers to leave */
+	while (ret)
+		ret = *lock - (PLOCK_WL_1 | PLOCK_SL_1 | PLOCK_RL_1);
+
+	/* always return true, this one is cheaper to return than 1 because
+	 * the compiler has placed it in a register for other operations above,
+	 * and thus saves one specific exit path.
+	 */
+	return PLOCK_WL_1 | PLOCK_SL_1 | PLOCK_RL_1;
+}
+
+/* request a seek access (W) and wait for it */
+static void pl_take_w(volatile unsigned long *lock)
+{
+	while (!pl_try_w(lock));
+}
+
+/* drop the write (W) lock entirely */
+static void pl_drop_w(volatile unsigned long *lock)
+{
+	pl_sub(lock, PLOCK_WL_1 | PLOCK_SL_1 | PLOCK_RL_1);
+}
+
 /* Try to upgrade from R to S, return non-zero on success, otherwise 0.
  * This lock will fail if S or W are already held. In case of failure to grab
  * the lock, it MUST NOT be retried without first dropping R, or it may never
@@ -228,12 +282,6 @@ static unsigned long pl_try_rtos(volatile unsigned long *lock)
 		pl_sub(lock, PLOCK_SL_1);
 
 	return !ret;
-}
-
-/* drop the write (W) lock entirely */
-static void pl_drop_w(volatile unsigned long *lock)
-{
-	pl_sub(lock, PLOCK_WL_1 | PLOCK_SL_1 | PLOCK_RL_1);
 }
 
 /* try to grab the exclusive (X) lock from U then wait for readers to leave.
