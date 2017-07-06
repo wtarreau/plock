@@ -147,7 +147,7 @@ void loop_mode3(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* read: X ; lookup : X ; write : X (ext-locked insert_unique) */
+/* read: W ; lookup : W ; write : W (ext-locked insert_unique) */
 void loop_mode4(void)
 {
 	int loops = 0;
@@ -156,15 +156,15 @@ void loop_mode4(void)
 	do {
 		if ((loops & 0xFF) < read_ratio) {
 			/* simulate a read */
-			pl_take_x(&global_lock);
+			pl_take_w(&global_lock);
 			for (i = 0; i < 200; i++);
-			pl_drop_x(&global_lock);
+			pl_drop_w(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_x(&global_lock);
+			pl_take_w(&global_lock);
 			for (i = 0; i < 190; i++);
 			for (i = 0; i < 10; i++);
-			pl_drop_x(&global_lock);
+			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 100; i++);
@@ -173,7 +173,7 @@ void loop_mode4(void)
 	         pl_xadd(&global_work, 128) < 20000000);
 }
 
-/* read: R ; lookup : X ; write : X (ext-locked lookup+insert) */
+/* read: R ; lookup : W ; write : W (ext-locked lookup+insert) */
 void loop_mode5(void)
 {
 	int loops = 0;
@@ -187,10 +187,10 @@ void loop_mode5(void)
 			pl_drop_r(&global_lock);
 		} else {
 			/* simulate a write */
-			pl_take_x(&global_lock);
+			pl_take_w(&global_lock);
 			for (i = 0; i < 190; i++);
 			for (i = 0; i < 10; i++);
-			pl_drop_x(&global_lock);
+			pl_drop_w(&global_lock);
 		}
 		/* simulate some real work */
 		for (i = 0; i < 100; i++);
@@ -341,8 +341,8 @@ void usage(int ret)
 	       "         1 : read: R ; lookup : R ; write : R (reference only, not realistic)\n"
 	       "         2 : read: S ; lookup : S ; write : W (typical of insert_unique)\n"
 	       "         3 : read: R ; lookup : S ; write : W (typical of lookup+insert)\n"
-	       "         4 : read: X ; lookup : X ; write : X (ext-locked insert_unique)\n"
-	       "         5 : read: R ; lookup : X ; write : X (ext-locked lookup+insert)\n"
+	       "         4 : read: W ; lookup : W ; write : W (ext-locked insert_unique)\n"
+	       "         5 : read: R ; lookup : W ; write : W (ext-locked lookup+insert)\n"
 	       "         6 : read: R ; lookup : R ; write : A (typical of atomic pick)\n"
 	       "         7 : read: R ; lookup : A ; write : A (typical of insert+delete)\n"
 	       "         8 : read: R ; lookup : R ; write : W (cache with high hit ratio)\n"
