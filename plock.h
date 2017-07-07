@@ -252,7 +252,8 @@ static unsigned long pl_try_w(volatile unsigned long *lock)
 /* request a seek access (W) and wait for it */
 static void pl_take_w(volatile unsigned long *lock)
 {
-	while (!pl_try_w(lock));
+	while (__builtin_expect(pl_try_w(lock), 1) == 0)
+		pl_cpu_relax();
 }
 
 /* drop the write (W) lock entirely */
