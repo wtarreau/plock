@@ -40,13 +40,12 @@
  * Principles of operations
  * ------------------------
  *
- * Locks have 6 states :
+ * Locks have 5 states :
  *
  *   - U: unlocked      : nobody claims the lock
  *   - R: read-locked   : some users are reading the shared resource
  *   - S: seek-locked   : reading is OK but nobody else may seek nor write
- *   - W: write-locked  : exclusive access for writing after S
- *   - X: exclusive     : immediate exclusive access
+ *   - W: write-locked  : exclusive access for writing (direct or after S)
  *   - A: atomic        : some atomic updates are being performed
  *
  * The locks are implemented using cumulable bit fields representing from
@@ -70,17 +69,16 @@
  * once the S lock is held, the owner is automatically granted the right to
  * upgrade it to W without checking for other writers. And it can take and
  * release the W lock multiple times atomically if needed. It must only wait
- * for last readers to leave. The X lock is a combination of R and W locks
- * that can immediately be granted from the unlocked state. It differs from
- * the W lock in that it will be weaker than atomic locks. The A lock supports
- * concurrent write accesses. For this reason it doesn't check for the W bits,
- * but it has to respect the S lock which is a promise of upgradability.
+ * for last readers to leave. The A lock supports concurrent write accesses
+ * and is used when certain atomic operations can be performed on a structure
+ * which also supports non-atomic operations. It is exclusive with the other
+ * locks. It is weaker than the S/W locks (S being a promise of upgradability),
+ * and will wait for any readers to leave before proceeding.
  *
  * In terms of representation, we have this :
  *   - R lock is made of the R bit
- *   - S lock is made of R + S bits
- *   - W lock is made of R + W + S bits
- *   - X lock is made of R + W bits
+ *   - S lock is made of S + R bits
+ *   - W lock is made of W + S + R bits
  *   - A lock is made of W bits only
  *
  * The lock can be upgraded between various states at the demand of the
@@ -89,7 +87,7 @@
  *   - U<->A : pl_take_a() / pl_drop_a()   (adds/subs W)
  *   - U<->R : pl_take_r() / pl_drop_r()   (adds/subs R)
  *   - U<->S : pl_take_s() / pl_drop_s()   (adds/subs S+R)
- *   - U<->X : pl_take_x() / pl_drop_x()   (adds/subs W+R)
+ *   - U<->W : pl_take_w() / pl_drop_w()   (adds/subs W+S+R)
  *   - S<->W : pl_stow()   / pl_wtos()     (adds/subs W)
  *
  * Other transitions are permitted in opportunistic mode, such as R to A.
@@ -282,64 +280,6 @@ static unsigned long pl_try_rtos(volatile unsigned long *lock)
 		pl_sub(lock, PLOCK_SL_1);
 
 	return !ret;
-}
-
-/* try to grab the exclusive (X) lock from U then wait for readers to leave.
- * returns non-zero on success otherwise zero.
- */
-static unsigned long pl_try_x(volatile unsigned long *lock)
-{
-	unsigned long r;
-
-	r = *lock;
-	if (__builtin_expect(r & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0))
-		return !r;
-
-	r = pl_xadd(lock, PLOCK_WL_1 | PLOCK_RL_1);
-
-	while (1) {
-		/* Now it's getting tricky. We want to abort if we detect
-		 * another writer or seeker. We also have to abort if a reader
-		 * turns into an atomic writer, since there's no way to
-		 * distinguish between a combination of atomic writers and
-		 * readers and a concurrent exclusive access. However we want
-		 * to wait for readers to see the W bit and leave, including
-		 * seekers. Here we have the risk that a read lock turns into
-		 * an atomic wite lock, so we must always watch the W bit after
-		 * a read check. Since the transition from R to A is atomic,
-		 * we're safe if we have neither R nor W in the same read.
-		 */
-		if (__builtin_expect(r & (PLOCK_WL_ANY | PLOCK_SL_ANY), 0)) {
-			pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
-			return !r;
-		}
-
-		if (__builtin_expect(r &= PLOCK_RL_ANY, 0) == 0)
-			break;
-
-		r = *lock - PLOCK_WL_1 - PLOCK_RL_1;
-	}
-
-	return !r;
-}
-
-/* immediately take the exclusive (X) lock from U and wait for readers to
- * leave.
- */
-static void pl_take_x(volatile unsigned long *lock)
-{
-	if (pl_try_x(lock))
-		return;
-
-	do {
-		pl_cpu_relax();
-	} while (!pl_try_x(lock));
-}
-
-/* drop the exclusive (X) lock entirely */
-static void pl_drop_x(volatile unsigned long *lock)
-{
-	pl_sub(lock, PLOCK_WL_1 | PLOCK_RL_1);
 }
 
 /* request atomic write access (A), return non-zero on success, otherwise 0 */
