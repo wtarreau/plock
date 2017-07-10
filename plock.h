@@ -135,7 +135,7 @@
 
 
 /* request shared read access (R), return non-zero on success, otherwise 0 */
-static unsigned long pl_try_r(volatile unsigned long *lock)
+static inline unsigned long pl_try_r(volatile unsigned long *lock)
 {
 	unsigned long ret;
 
@@ -151,19 +151,19 @@ static unsigned long pl_try_r(volatile unsigned long *lock)
 }
 
 /* request shared read access (R) and wait for it */
-static void pl_take_r(volatile unsigned long *lock)
+static inline void pl_take_r(volatile unsigned long *lock)
 {
 	while (!pl_try_r(lock));
 }
 
 /* release the read access (R) lock */
-static void pl_drop_r(volatile unsigned long *lock)
+static inline void pl_drop_r(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_RL_1);
 }
 
 /* request a seek access (S), return non-zero on success, otherwise 0 */
-static unsigned long pl_try_s(volatile unsigned long *lock)
+static inline unsigned long pl_try_s(volatile unsigned long *lock)
 {
 	unsigned long ret;
 
@@ -179,20 +179,20 @@ static unsigned long pl_try_s(volatile unsigned long *lock)
 }
 
 /* request a seek access (S) and wait for it */
-static void pl_take_s(volatile unsigned long *lock)
+static inline void pl_take_s(volatile unsigned long *lock)
 {
 	while (!pl_try_s(lock));
 }
 
 /* release the seek access (S) lock */
-static void pl_drop_s(volatile unsigned long *lock)
+static inline void pl_drop_s(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_SL_1 + PLOCK_RL_1);
 }
 
 
 /* take the W lock under the S lock */
-static void pl_stow(volatile unsigned long *lock)
+static inline void pl_stow(volatile unsigned long *lock)
 {
 	unsigned long r;
 
@@ -202,13 +202,13 @@ static void pl_stow(volatile unsigned long *lock)
 }
 
 /* drop the W lock and go back to the S lock */
-static void pl_wtos(volatile unsigned long *lock)
+static inline void pl_wtos(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1);
 }
 
 /* request a write access (W), return non-zero on success, otherwise 0 */
-static unsigned long pl_try_w(volatile unsigned long *lock)
+static inline unsigned long pl_try_w(volatile unsigned long *lock)
 {
 	unsigned long ret;
 
@@ -250,14 +250,14 @@ static unsigned long pl_try_w(volatile unsigned long *lock)
 }
 
 /* request a seek access (W) and wait for it */
-static void pl_take_w(volatile unsigned long *lock)
+static inline void pl_take_w(volatile unsigned long *lock)
 {
 	while (__builtin_expect(pl_try_w(lock), 1) == 0)
 		pl_cpu_relax();
 }
 
 /* drop the write (W) lock entirely */
-static void pl_drop_w(volatile unsigned long *lock)
+static inline void pl_drop_w(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1 | PLOCK_SL_1 | PLOCK_RL_1);
 }
@@ -267,7 +267,7 @@ static void pl_drop_w(volatile unsigned long *lock)
  * the lock, it MUST NOT be retried without first dropping R, or it may never
  * complete due to S waiting for R to leave before upgrading to W.
  */
-static unsigned long pl_try_rtos(volatile unsigned long *lock)
+static inline unsigned long pl_try_rtos(volatile unsigned long *lock)
 {
 	unsigned long ret;
 
@@ -284,7 +284,7 @@ static unsigned long pl_try_rtos(volatile unsigned long *lock)
 }
 
 /* request atomic write access (A), return non-zero on success, otherwise 0 */
-static unsigned long pl_try_a(volatile unsigned long *lock)
+static inline unsigned long pl_try_a(volatile unsigned long *lock)
 {
 	unsigned long ret;
 
@@ -316,13 +316,13 @@ static unsigned long pl_try_a(volatile unsigned long *lock)
 }
 
 /* request atomic write access (A) and wait for it */
-static void pl_take_a(volatile unsigned long *lock)
+static inline void pl_take_a(volatile unsigned long *lock)
 {
 	while (!pl_try_a(lock));
 }
 
 /* release atomc write access (A) lock */
-static void pl_drop_a(volatile unsigned long *lock)
+static inline void pl_drop_a(volatile unsigned long *lock)
 {
 	pl_sub(lock, PLOCK_WL_1);
 }
@@ -335,7 +335,7 @@ static void pl_drop_a(volatile unsigned long *lock)
  * to W. The lock succeeds once there's no more R (ie all of them have either
  * completed or were turned to A).
  */
-static unsigned long pl_try_rtoa(volatile unsigned long *lock)
+static inline unsigned long pl_try_rtoa(volatile unsigned long *lock)
 {
 	unsigned long ret;
 
