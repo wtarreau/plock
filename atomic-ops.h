@@ -403,28 +403,28 @@ static inline void pl_cpu_relax()
 #define pl_xchg(ptr, x) (                                                     \
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned long ret = (unsigned long)(x);                       \
-		asm volatile("lock xchgq %0, %1\n"                            \
+		asm volatile("xchgq %0, %1\n"                                 \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned int ret = (unsigned int)(x);                         \
-		asm volatile("lock xchgl %0, %1\n"                            \
+		asm volatile("xchgl %0, %1\n"                                 \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned short ret = (unsigned short)(x);                     \
-		asm volatile("lock xchgw %0, %1\n"                            \
+		asm volatile("xchgw %0, %1\n"                                 \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
 		unsigned char ret = (unsigned char)(x);                       \
-		asm volatile("lock xchgb %0, %1\n"                            \
+		asm volatile("xchgb %0, %1\n"                                 \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
 			     : "cc");                                         \
