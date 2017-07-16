@@ -23,7 +23,7 @@ static inline void pl_cpu_relax()
 			     "setne %1\n"                                     \
 			     : "+m" (*(ptr)), "=qm" (ret)                     \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned char ret;                                            \
@@ -31,7 +31,7 @@ static inline void pl_cpu_relax()
 			     "setne %1\n"                                     \
 			     : "+m" (*(ptr)), "=qm" (ret)                     \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned char ret;                                            \
@@ -39,7 +39,7 @@ static inline void pl_cpu_relax()
 			     "setne %1\n"                                     \
 			     : "+m" (*(ptr)), "=qm" (ret)                     \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
 		unsigned char ret;                                            \
@@ -47,7 +47,7 @@ static inline void pl_cpu_relax()
 			     "setne %1\n"                                     \
 			     : "+m" (*(ptr)), "=qm" (ret)                     \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : ({                                                               \
 		void __unsupported_argument_size_for_pl_inc__(char *,int);    \
@@ -66,7 +66,7 @@ static inline void pl_cpu_relax()
 			     "setne %1\n"                                     \
 			     : "+m" (*(ptr)), "=qm" (ret)                     \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned char ret;                                            \
@@ -74,7 +74,7 @@ static inline void pl_cpu_relax()
 			     "setne %1\n"                                     \
 			     : "+m" (*(ptr)), "=qm" (ret)                     \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned char ret;                                            \
@@ -82,7 +82,7 @@ static inline void pl_cpu_relax()
 			     "setne %1\n"                                     \
 			     : "+m" (*(ptr)), "=qm" (ret)                     \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
 		unsigned char ret;                                            \
@@ -90,7 +90,7 @@ static inline void pl_cpu_relax()
 			     "setne %1\n"                                     \
 			     : "+m" (*(ptr)), "=qm" (ret)                     \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : ({                                                               \
 		void __unsupported_argument_size_for_pl_dec__(char *,int);    \
@@ -105,22 +105,22 @@ static inline void pl_cpu_relax()
 		asm volatile("lock incq %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 4) {                                     \
 		asm volatile("lock incl %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 2) {                                     \
 		asm volatile("lock incw %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 1) {                                     \
 		asm volatile("lock incb %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else {                                                              \
 		void __unsupported_argument_size_for_pl_inc_noret__(char *,int);   \
 		__unsupported_argument_size_for_pl_inc_noret__(__FILE__,__LINE__); \
@@ -133,22 +133,22 @@ static inline void pl_cpu_relax()
 		asm volatile("lock decq %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 4) {                                     \
 		asm volatile("lock decl %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 2) {                                     \
 		asm volatile("lock decw %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 1) {                                     \
 		asm volatile("lock decb %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
 			     :                                                \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else {                                                              \
 		void __unsupported_argument_size_for_pl_dec_noret__(char *,int);   \
 		__unsupported_argument_size_for_pl_dec_noret__(__FILE__,__LINE__); \
@@ -163,22 +163,22 @@ static inline void pl_cpu_relax()
 		asm volatile("lock addq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned long)(x))                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 4) {                                     \
 		asm volatile("lock addl %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned int)(x))                       \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 2) {                                     \
 		asm volatile("lock addw %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned short)(x))                     \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 1) {                                     \
 		asm volatile("lock addb %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned char)(x))                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else {                                                              \
 		void __unsupported_argument_size_for_pl_add__(char *,int);    \
 		__unsupported_argument_size_for_pl_add__(__FILE__,__LINE__);  \
@@ -193,22 +193,22 @@ static inline void pl_cpu_relax()
 		asm volatile("lock subq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned long)(x))                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 4) {                                     \
 		asm volatile("lock subl %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned int)(x))                       \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 2) {                                     \
 		asm volatile("lock subw %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned short)(x))                     \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 1) {                                     \
 		asm volatile("lock subb %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned char)(x))                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else {                                                              \
 		void __unsupported_argument_size_for_pl_sub__(char *,int);    \
 		__unsupported_argument_size_for_pl_sub__(__FILE__,__LINE__);  \
@@ -223,22 +223,22 @@ static inline void pl_cpu_relax()
 		asm volatile("lock andq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned long)(x))                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 4) {                                     \
 		asm volatile("lock andl %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned int)(x))                       \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 2) {                                     \
 		asm volatile("lock andw %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned short)(x))                     \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else if (sizeof(*(ptr)) == 1) {                                     \
 		asm volatile("lock andb %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
 			     : "er" ((unsigned char)(x))                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 	} else {                                                              \
 		void __unsupported_argument_size_for_pl_and__(char *,int);    \
 		__unsupported_argument_size_for_pl_and__(__FILE__,__LINE__);  \
@@ -256,7 +256,7 @@ static inline void pl_cpu_relax()
 			     "sbb %1, %1\n\t"                                 \
 			     : "+m" (*(ptr)), "=r" (ret)                      \
 			     : "Ir" ((unsigned long)(bit))                    \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned int ret;                                             \
@@ -264,7 +264,7 @@ static inline void pl_cpu_relax()
 			     "sbb %1, %1\n\t"                                 \
 			     : "+m" (*(ptr)), "=r" (ret)                      \
 			     : "Ir" ((unsigned int)(bit))                     \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned short ret;                                           \
@@ -272,7 +272,7 @@ static inline void pl_cpu_relax()
 			     "sbb %1, %1\n\t"                                 \
 			     : "+m" (*(ptr)), "=r" (ret)                      \
 			     : "Ir" ((unsigned short)(bit))                   \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : ({                                                               \
 		void __unsupported_argument_size_for_pl_bts__(char *,int);    \
@@ -295,28 +295,28 @@ static inline void pl_cpu_relax()
 		asm volatile("lock xaddq %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned int ret = (unsigned int)(x);                         \
 		asm volatile("lock xaddl %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned short ret = (unsigned short)(x);                     \
 		asm volatile("lock xaddw %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
 		unsigned char ret = (unsigned char)(x);                       \
 		asm volatile("lock xaddb %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : ({                                                               \
 		void __unsupported_argument_size_for_pl_xadd__(char *,int);   \
@@ -334,28 +334,28 @@ static inline void pl_cpu_relax()
 		asm volatile("lock xchgq %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned int ret = (unsigned int)(x);                         \
 		asm volatile("lock xchgl %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned short ret = (unsigned short)(x);                     \
 		asm volatile("lock xchgw %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
 		unsigned char ret = (unsigned char)(x);                       \
 		asm volatile("lock xchgb %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : ({                                                               \
 		void __unsupported_argument_size_for_pl_xchg__(char *,int);   \
@@ -375,7 +375,7 @@ static inline void pl_cpu_relax()
 			     : "=a" (ret), "+m" (*(ptr))                      \
 			     : "r" ((unsigned long)(new)),                    \
 			       "0" ((unsigned long)(old))                     \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned int ret;                                             \
@@ -383,7 +383,7 @@ static inline void pl_cpu_relax()
 			     : "=a" (ret), "+m" (*(ptr))                      \
 			     : "r" ((unsigned int)(new)),                     \
 			       "0" ((unsigned int)(old))                      \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned short ret;                                           \
@@ -391,7 +391,7 @@ static inline void pl_cpu_relax()
 			     : "=a" (ret), "+m" (*(ptr))                      \
 			     : "r" ((unsigned short)(new)),                   \
 			       "0" ((unsigned short)(old))                    \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
 		unsigned char ret;                                            \
@@ -399,7 +399,7 @@ static inline void pl_cpu_relax()
 			     : "=a" (ret), "+m" (*(ptr))                      \
 			     : "r" ((unsigned char)(new)),                    \
 			       "0" ((unsigned char)(old))                     \
-			     : "memory");                                     \
+			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : ({                                                               \
 		void __unsupported_argument_size_for_pl_cmpxchg__(char *,int);   \
