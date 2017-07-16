@@ -112,6 +112,25 @@ The compatiblity matrix looks like this for any two threads :
            -----+----+----+----+-----+-----
 
 
+The S and A locks are very special in that they are not fully exclusive :
+
+
+             Concurrent accesses allowed
+  Current
+  state   |   U  |   R  |   S  |   W  |   A
+     -----+------+------+------+------+-------
+       U  | 0..N | 0..N | 0..1 | 0..1 | 0..N
+     -----+------+------+------+------+-------
+       R  | 0..N | 0..N | 0..1 |   0  |   0
+     -----+------+------+------+------+-------
+       S  | 0..N | 0..N |   0  |   0  |   0
+     -----+------+------+------+------+-------
+       W  | 0..N |   0  |   0  |   0  |   0
+     -----+------+------+------+------+-------
+       A  | 0..N |   0  |   0  |   0  | 0..N
+     -----+------+------+------+------+-------
+
+
 Note: it's still hard to find short names which unambiguously match the various
       use cases :
         - the read-only access may be qualified as "Shared Read", "Read Only",
