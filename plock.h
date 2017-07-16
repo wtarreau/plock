@@ -214,6 +214,18 @@
 	})                                                                                     \
 )
 
+/* drop the S lock and go back to the R lock */
+#define pl_stor(lock) (                                                                        \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_sub(lock, PLOCK64_SL_1);                                                    \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_sub(lock, PLOCK32_SL_1);                                                    \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_stor__(char *,int);                    \
+		__unsupported_argument_size_for_pl_stor__(__FILE__,__LINE__);                  \
+	})                                                                                     \
+)
+
 /* take the W lock under the S lock */
 #define pl_stow(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
@@ -239,6 +251,18 @@
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_wtos__(char *,int);                    \
 		__unsupported_argument_size_for_pl_wtos__(__FILE__,__LINE__);                  \
+	})                                                                                     \
+)
+
+/* drop the W lock and go back to the R lock */
+#define pl_wtor(lock) (                                                                        \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_sub(lock, PLOCK64_WL_1 | PLOCK64_SL_1);                                     \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_sub(lock, PLOCK32_WL_1 | PLOCK32_SL_1);                                     \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_wtor__(char *,int);                    \
+		__unsupported_argument_size_for_pl_wtor__(__FILE__,__LINE__);                  \
 	})                                                                                     \
 )
 
