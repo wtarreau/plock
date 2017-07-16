@@ -8,6 +8,12 @@ static inline void pl_barrier()
 	asm volatile("" ::: "memory");
 }
 
+/* full memory barrier */
+static inline void pl_mb()
+{
+	__sync_synchronize();
+}
+
 #if defined(__i386__) || defined (__i486__) || defined (__i586__) || defined (__i686__) || defined (__x86_64__)
 
 /*
