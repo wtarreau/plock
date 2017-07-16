@@ -160,7 +160,11 @@
 )
 
 /* request shared read access (R) and wait for it */
-#define pl_take_r(lock) do { } while (!pl_try_r(lock))
+#define pl_take_r(lock)                                                                        \
+	do {                                                                                   \
+		while (__builtin_expect(pl_try_r(lock), 1) == 0)                               \
+		       pl_cpu_relax();                                                         \
+	} while (0)
 
 /* release the read access (R) lock */
 #define pl_drop_r(lock) (                                                                      \
@@ -204,7 +208,11 @@
 )
 
 /* request a seek access (S) and wait for it */
-#define pl_take_s(lock) do { } while (!pl_try_s(lock))
+#define pl_take_s(lock)                                                                        \
+	do {				                                                       \
+		while (__builtin_expect(pl_try_s(lock), 0) == 0)                               \
+		       pl_cpu_relax();                                                         \
+	} while (0)
 
 /* release the seek access (S) lock */
 #define pl_drop_s(lock) (                                                                      \
@@ -334,7 +342,7 @@
 /* request a seek access (W) and wait for it */
 #define pl_take_w(lock)                                                                        \
 	do {				                                                       \
-		while (__builtin_expect(pl_try_w(lock), 1) == 0)                               \
+		while (__builtin_expect(pl_try_w(lock), 0) == 0)                               \
 		       pl_cpu_relax();                                                         \
 	} while (0)
 
@@ -435,7 +443,11 @@
 )
 
 /* request atomic write access (A) and wait for it */
-#define pl_take_a(lock) do { } while (!pl_try_a(lock))
+#define pl_take_a(lock)                                                                        \
+	do {				                                                       \
+		while (__builtin_expect(pl_try_a(lock), 1) == 0)                               \
+		       pl_cpu_relax();                                                         \
+	} while (0)
 
 /* release atomic write access (A) lock */
 #define pl_drop_a(lock) (                                                                      \
