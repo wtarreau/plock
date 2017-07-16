@@ -13,357 +13,401 @@ static inline void pl_cpu_relax()
 	asm volatile("rep;nop\n" ::: "memory");
 }
 
-/*
- * Explicit 32-bit functions for use with unsigned int, common to i386 and x86_64
+/* increment integer value pointed to by pointer <ptr>, and return non-zero if
+ * result is non-null.
  */
+#define pl_inc(ptr) (                                                         \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned char ret;                                            \
+		asm volatile("lock incq %0\n"                                 \
+			     "setne %1\n"                                     \
+			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     :                                                \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned char ret;                                            \
+		asm volatile("lock incl %0\n"                                 \
+			     "setne %1\n"                                     \
+			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     :                                                \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned char ret;                                            \
+		asm volatile("lock incw %0\n"                                 \
+			     "setne %1\n"                                     \
+			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     :                                                \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
+		unsigned char ret;                                            \
+		asm volatile("lock incb %0\n"                                 \
+			     "setne %1\n"                                     \
+			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     :                                                \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_inc__(char *,int);    \
+		__unsupported_argument_size_for_pl_inc__(__FILE__,__LINE__);  \
+		0;                                                            \
+	})                                                                    \
+)
 
-/* increment value and return non-zero if result is non-null */
-static inline unsigned char pl32_inc(volatile unsigned int *ptr)
-{
-	unsigned char ret;
-	asm volatile("lock incl %0\n"
-		     "setne %1\n"
-		     : "+m" (*ptr), "=qm" (ret)
-		     :
-		     : "memory");
-	return ret;
-}
+/* decrement integer value pointed to by pointer <ptr>, and return non-zero if
+ * result is non-null.
+ */
+#define pl_dec(ptr) (                                                         \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned char ret;                                            \
+		asm volatile("lock decq %0\n"                                 \
+			     "setne %1\n"                                     \
+			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     :                                                \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned char ret;                                            \
+		asm volatile("lock decl %0\n"                                 \
+			     "setne %1\n"                                     \
+			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     :                                                \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned char ret;                                            \
+		asm volatile("lock decw %0\n"                                 \
+			     "setne %1\n"                                     \
+			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     :                                                \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
+		unsigned char ret;                                            \
+		asm volatile("lock decb %0\n"                                 \
+			     "setne %1\n"                                     \
+			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     :                                                \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_dec__(char *,int);    \
+		__unsupported_argument_size_for_pl_dec__(__FILE__,__LINE__);  \
+		0;                                                            \
+	})                                                                    \
+)
 
-/* decrement value and return non-zero if result is non-null */
-static inline unsigned char pl32_dec(volatile unsigned int *ptr)
-{
-	unsigned char ret;
-	asm volatile("lock decl %0\n"
-		     "setne %1\n"
-		     : "+m" (*ptr), "=qm" (ret)
-		     :
-		     : "memory");
-	return ret;
-}
+/* increment integer value pointed to by pointer <ptr>, no return */
+#define pl_inc_noret(ptr) ({                                                  \
+	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
+		asm volatile("lock incq %0\n"                                 \
+			     : "+m" (*(ptr))                                  \
+			     :                                                \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 4) {                                     \
+		asm volatile("lock incl %0\n"                                 \
+			     : "+m" (*(ptr))                                  \
+			     :                                                \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 2) {                                     \
+		asm volatile("lock incw %0\n"                                 \
+			     : "+m" (*(ptr))                                  \
+			     :                                                \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 1) {                                     \
+		asm volatile("lock incb %0\n"                                 \
+			     : "+m" (*(ptr))                                  \
+			     :                                                \
+			     : "memory");                                     \
+	} else {                                                              \
+		void __unsupported_argument_size_for_pl_inc_noret__(char *,int);   \
+		__unsupported_argument_size_for_pl_inc_noret__(__FILE__,__LINE__); \
+	}                                                                     \
+})
 
-/* increment bit value, no return */
-static inline void pl32_inc_noret(volatile unsigned int *ptr)
-{
-	asm volatile("lock incl %0\n" : "+m" (*ptr) :: "memory");
-}
+/* decrement integer value pointed to by pointer <ptr>, no return */
+#define pl_dec_noret(ptr) ({                                                  \
+	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
+		asm volatile("lock decq %0\n"                                 \
+			     : "+m" (*(ptr))                                  \
+			     :                                                \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 4) {                                     \
+		asm volatile("lock decl %0\n"                                 \
+			     : "+m" (*(ptr))                                  \
+			     :                                                \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 2) {                                     \
+		asm volatile("lock decw %0\n"                                 \
+			     : "+m" (*(ptr))                                  \
+			     :                                                \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 1) {                                     \
+		asm volatile("lock decb %0\n"                                 \
+			     : "+m" (*(ptr))                                  \
+			     :                                                \
+			     : "memory");                                     \
+	} else {                                                              \
+		void __unsupported_argument_size_for_pl_dec_noret__(char *,int);   \
+		__unsupported_argument_size_for_pl_dec_noret__(__FILE__,__LINE__); \
+	}                                                                     \
+})
 
-/* decrement bit value, no return */
-static inline void pl32_dec_noret(volatile unsigned int *ptr)
-{
-	asm volatile("lock decl %0\n" : "+m" (*ptr) :: "memory");
-}
+/* add integer constant <x> to integer value pointed to by pointer <ptr>,
+ * no return. Size of <x> is not checked.
+ */
+#define pl_add(ptr, x) ({                                                     \
+	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
+		asm volatile("lock addq %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned long)(x))                      \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 4) {                                     \
+		asm volatile("lock addl %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned int)(x))                       \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 2) {                                     \
+		asm volatile("lock addw %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned short)(x))                     \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 1) {                                     \
+		asm volatile("lock addb %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned char)(x))                      \
+			     : "memory");                                     \
+	} else {                                                              \
+		void __unsupported_argument_size_for_pl_add__(char *,int);    \
+		__unsupported_argument_size_for_pl_add__(__FILE__,__LINE__);  \
+	}                                                                     \
+})
 
-/* add constant <x> to <*ptr>, no return */
-static inline void pl32_add(volatile unsigned int *ptr, unsigned int x)
-{
-	asm volatile("lock addl %1, %0\n"
-		     : "+m" (*ptr)
-		     : "ir" (x)
-		     : "memory");
-}
+/* subtract integer constant <x> from integer value pointed to by pointer
+ * <ptr>, no return. Size of <x> is not checked.
+ */
+#define pl_sub(ptr, x) ({                                                     \
+	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
+		asm volatile("lock subq %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned long)(x))                      \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 4) {                                     \
+		asm volatile("lock subl %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned int)(x))                       \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 2) {                                     \
+		asm volatile("lock subw %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned short)(x))                     \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 1) {                                     \
+		asm volatile("lock subb %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned char)(x))                      \
+			     : "memory");                                     \
+	} else {                                                              \
+		void __unsupported_argument_size_for_pl_sub__(char *,int);    \
+		__unsupported_argument_size_for_pl_sub__(__FILE__,__LINE__);  \
+	}                                                                     \
+})
 
-/* subtract constant <x> from <*ptr>, no return */
-static inline void pl32_sub(volatile unsigned int *ptr, unsigned int x)
-{
-	asm volatile("lock subl %1, %0\n"
-		     : "+m" (*ptr)
-		     : "ir" (x)
-		     : "memory");
-}
+/* binary and integer value pointed to by pointer <ptr> with constant <x>, no
+ * return. Size of <x> is not checked.
+ */
+#define pl_and(ptr, x) ({                                                     \
+	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
+		asm volatile("lock andq %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned long)(x))                      \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 4) {                                     \
+		asm volatile("lock andl %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned int)(x))                       \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 2) {                                     \
+		asm volatile("lock andw %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned short)(x))                     \
+			     : "memory");                                     \
+	} else if (sizeof(*(ptr)) == 1) {                                     \
+		asm volatile("lock andb %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned char)(x))                      \
+			     : "memory");                                     \
+	} else {                                                              \
+		void __unsupported_argument_size_for_pl_and__(char *,int);    \
+		__unsupported_argument_size_for_pl_and__(__FILE__,__LINE__);  \
+	}                                                                     \
+})
 
-/* binary and <*ptr> with constant <x>, no return */
-static inline void pl32_and(volatile unsigned int *ptr, unsigned int x)
-{
-	asm volatile("lock andl %1, %0\n"
-		     : "+m" (*ptr)
-		     : "ir" (x)
-		     : "memory");
-}
+/* test and set bit <bit> in integer value pointed to by pointer <ptr>. Returns
+ * 0 if the bit was not set, or ~0 of the same type as *ptr if it was set. Note
+ * that there is no 8-bit equivalent operation.
+ */
+#define pl_bts(ptr, bit) (                                                    \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned long ret;                                            \
+		asm volatile("lock btsq %2, %0\n\t"                           \
+			     "sbb %1, %1\n\t"                                 \
+			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     : "Ir" ((unsigned long)(bit))                    \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned int ret;                                             \
+		asm volatile("lock btsl %2, %0\n\t"                           \
+			     "sbb %1, %1\n\t"                                 \
+			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     : "Ir" ((unsigned int)(bit))                     \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned short ret;                                           \
+		asm volatile("lock btsw %2, %0\n\t"                           \
+			     "sbb %1, %1\n\t"                                 \
+			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     : "Ir" ((unsigned short)(bit))                   \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_bts__(char *,int);    \
+		__unsupported_argument_size_for_pl_bts__(__FILE__,__LINE__);  \
+		0;                                                            \
+	})                                                                    \
+)
 
-/* test and set a bit. Previous value is returned as 0 (not set) or -1 (set). */
-static inline unsigned int pl32_bts(volatile unsigned int *ptr, const unsigned int bit)
-{
-	unsigned int ret;
-	asm volatile("lock btsl %2, %0\n\t"
-		     "sbb %1, %1\n\t"
-		     : "+m" (*ptr), "=r" (ret)
-		     : "Ir" (bit)
-		     : "memory");
-	return ret;
-}
-
-/* For an unclear reason, gcc's __sync_fetch_and_add() implementation produces
- * less optimal than hand-crafted asm code so let's implement here the
+/* Note: for an unclear reason, gcc's __sync_fetch_and_add() implementation
+ * produces less optimal than hand-crafted asm code so let's implement here the
  * operations we need for the most common archs.
  */
 
-/* temp = x; x = *ptr ; *ptr += temp */
-static inline unsigned int pl32_xadd(volatile unsigned int *ptr, unsigned int x)
-{
-	asm volatile("lock xaddl %0, %1\n"
-		     :  "=r" (x), "+m" (*ptr)
-		     : "0" (x)
-		     : "memory");
-	return x;
-}
-
-/* exchange <x> with <*ptr> and return previous contents of <*ptr> */
-static inline unsigned int pl32_xchg(volatile unsigned int *ptr, unsigned int x)
-{
-	asm volatile("lock xchg %0,%1"
-		     : "=r" (x), "+m" (*ptr)
-		     : "0" (x)
-		     : "memory");
-	return x;
-}
-
-/* compare <*ptr> with <old> and exchange with <new> if matches, and return <old>. */
-static inline unsigned int pl32_cmpxchg(volatile unsigned int *ptr, unsigned int old, unsigned int new)
-{
-	unsigned int ret;
-
-	asm volatile("lock cmpxchg %2,%1"
-		     : "=a" (ret), "+m" (*ptr)
-		     : "r" (new), "0" (old)
-		     : "memory");
-	return ret;
-}
-
-/*
- * Functions acting on "long" below
+/* fetch-and-add: fetch integer value pointed to by pointer <ptr>, add <x> to
+ * to <*ptr> and return the previous value.
  */
+#define pl_xadd(ptr, x) (                                                     \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned long ret = (unsigned long)(x);                       \
+		asm volatile("lock xaddq %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned int ret = (unsigned int)(x);                         \
+		asm volatile("lock xaddl %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned short ret = (unsigned short)(x);                     \
+		asm volatile("lock xaddw %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
+		unsigned char ret = (unsigned char)(x);                       \
+		asm volatile("lock xaddb %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_xadd__(char *,int);   \
+		__unsupported_argument_size_for_pl_xadd__(__FILE__,__LINE__); \
+		0;                                                            \
+	})                                                                    \
+)
 
-#if defined(__x86_64__)
-/* x86 64 bits */
-
-/* increment value and return non-zero if result is non-null */
-static inline unsigned char pl_inc(volatile unsigned long *ptr)
-{
-	unsigned char ret;
-	asm volatile("lock incq %0\n"
-		     "setne %1\n"
-		     : "+m" (*ptr), "=qm" (ret)
-		     :
-		     : "memory");
-	return ret;
-}
-
-/* decrement value and return non-zero if result is non-null */
-static inline unsigned char pl_dec(volatile unsigned long *ptr)
-{
-	unsigned char ret;
-	asm volatile("lock decq %0\n"
-		     "setne %1\n"
-		     : "+m" (*ptr), "=qm" (ret)
-		     :
-		     : "memory");
-	return ret;
-}
-
-/* increment bit value, no return */
-static inline void pl_inc_noret(volatile unsigned long *ptr)
-{
-	asm volatile("lock incq %0\n" : "+m" (*ptr) :: "memory");
-}
-
-/* decrement bit value, no return */
-static inline void pl_dec_noret(volatile unsigned long *ptr)
-{
-	asm volatile("lock decq %0\n" : "+m" (*ptr) :: "memory");
-}
-
-/* add constant <x> to <*ptr>, no return */
-static inline void pl_add(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock addq %1, %0\n"
-		     : "+m" (*ptr)
-		     : "er" (x)
-		     : "memory");
-}
-
-/* subtract constant <x> from <*ptr>, no return */
-static inline void pl_sub(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock subq %1, %0\n"
-		     : "+m" (*ptr)
-		     : "er" (x)
-		     : "memory");
-}
-
-/* binary and <*ptr> with constant <x>, no return */
-static inline void pl_and(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock andq %1, %0\n"
-		     : "+m" (*ptr)
-		     : "er" (x)
-		     : "memory");
-}
-
-/* test and set a bit. Previous value is returned as 0 (not set) or -1 (set). */
-static inline unsigned long pl_bts(volatile unsigned long *ptr, const unsigned long bit)
-{
-	unsigned long ret;
-	asm volatile("lock btsq %2, %0\n\t"
-		     "sbb %1, %1\n\t"
-		     : "+m" (*ptr), "=r" (ret)
-		     : "Ir" (bit)
-		     : "memory");
-	return ret;
-}
-
-/* For an unclear reason, gcc's __sync_fetch_and_add() implementation produces
- * less optimal than hand-crafted asm code so let's implement here the
- * operations we need for the most common archs.
+/* exchage value <x> with integer value pointed to by pointer <ptr>, and return
+ * previous <*ptr> value. <x> must be of the same size as <*ptr>.
  */
+#define pl_xchg(ptr, x) (                                                     \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned long ret = (unsigned long)(x);                       \
+		asm volatile("lock xchgq %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned int ret = (unsigned int)(x);                         \
+		asm volatile("lock xchgl %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned short ret = (unsigned short)(x);                     \
+		asm volatile("lock xchgw %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
+		unsigned char ret = (unsigned char)(x);                       \
+		asm volatile("lock xchgb %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_xchg__(char *,int);   \
+		__unsupported_argument_size_for_pl_xchg__(__FILE__,__LINE__); \
+		0;                                                            \
+	})                                                                    \
+)
 
-/* temp = x; x = *ptr ; *ptr += temp */
-static inline unsigned long pl_xadd(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock xaddq %0, %1\n"
-		     :  "=r" (x), "+m" (*ptr)
-		     : "0" (x)
-		     : "memory");
-	return x;
-}
-
-/* exchange <x> with <*ptr> and return previous contents of <*ptr> */
-static inline unsigned long pl_xchg(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock xchg %0,%1"
-		     : "=r" (x), "+m" (*ptr)
-		     : "0" (x)
-		     : "memory");
-	return x;
-}
-
-/* compare <*ptr> with <old> and exchange with <new> if matches, and return <old>. */
-static inline unsigned long pl_cmpxchg(volatile unsigned long *ptr, unsigned long old, unsigned long new)
-{
-	unsigned long ret;
-
-	asm volatile("lock cmpxchg %2,%1"
-		     : "=a" (ret), "+m" (*ptr)
-		     : "r" (new), "0" (old)
-		     : "memory");
-	return ret;
-}
-
-#else 
-/* x86 32 bits */
-
-/* increment value and return non-zero if result is non-null */
-static inline unsigned char pl_inc(volatile unsigned long *ptr)
-{
-	unsigned char ret;
-	asm volatile("lock incl %0\n"
-		     "setne %1\n"
-		     : "+m" (*ptr), "=qm" (ret)
-		     :
-		     : "memory");
-	return ret;
-}
-
-/* decrement value and return non-zero if result is non-null */
-static inline unsigned char pl_dec(volatile unsigned long *ptr)
-{
-	unsigned char ret;
-	asm volatile("lock decl %0\n"
-		     "setne %1\n"
-		     : "+m" (*ptr), "=qm" (ret)
-		     :
-		     : "memory");
-	return ret;
-}
-
-/* increment bit value, no return */
-static inline void pl_inc_noret(volatile unsigned long *ptr)
-{
-	asm volatile("lock incl %0\n" : "+m" (*ptr) :: "memory");
-}
-
-/* decrement bit value, no return */
-static inline void pl_dec_noret(volatile unsigned long *ptr)
-{
-	asm volatile("lock decl %0\n" : "+m" (*ptr) :: "memory");
-}
-
-/* add constant <x> to <*ptr>, no return */
-static inline void pl_add(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock addl %1, %0\n"
-		     : "+m" (*ptr)
-		     : "ir" (x)
-		     : "memory");
-}
-
-/* subtract constant <x> from <*ptr>, no return */
-static inline void pl_sub(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock subl %1, %0\n"
-		     : "+m" (*ptr)
-		     : "ir" (x)
-		     : "memory");
-}
-
-/* binary and <*ptr> with constant <x>, no return */
-static inline void pl_and(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock andl %1, %0\n"
-		     : "+m" (*ptr)
-		     : "ir" (x)
-		     : "memory");
-}
-
-/* test and set a bit. Previous value is returned as 0 (not set) or -1 (set). */
-static inline unsigned long pl_bts(volatile unsigned long *ptr, const unsigned long bit)
-{
-	unsigned long ret;
-	asm volatile("lock btsl %2, %0\n\t"
-		     "sbb %1, %1\n\t"
-		     : "+m" (*ptr), "=r" (ret)
-		     : "Ir" (bit)
-		     : "memory");
-	return ret;
-}
-
-/* For an unclear reason, gcc's __sync_fetch_and_add() implementation produces
- * less optimal than hand-crafted asm code so let's implement here the
- * operations we need for the most common archs.
+/* compare integer value <*ptr> with <old> and exchange it with <new> if
+ * it matches, and return <old>. <old> and <new> must be of the same size as
+ * <*ptr>.
  */
+#define pl_cmpxchg(ptr, old, new) (                                           \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned long ret;                                            \
+		asm volatile("lock cmpxchgq %2,%1"                            \
+			     : "=a" (ret), "+m" (*(ptr))                      \
+			     : "r" ((unsigned long)(new)),                    \
+			       "0" ((unsigned long)(old))                     \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned int ret;                                             \
+		asm volatile("lock cmpxchgl %2,%1"                            \
+			     : "=a" (ret), "+m" (*(ptr))                      \
+			     : "r" ((unsigned int)(new)),                     \
+			       "0" ((unsigned int)(old))                      \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned short ret;                                           \
+		asm volatile("lock cmpxchgw %2,%1"                            \
+			     : "=a" (ret), "+m" (*(ptr))                      \
+			     : "r" ((unsigned short)(new)),                   \
+			       "0" ((unsigned short)(old))                    \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
+		unsigned char ret;                                            \
+		asm volatile("lock cmpxchgb %2,%1"                            \
+			     : "=a" (ret), "+m" (*(ptr))                      \
+			     : "r" ((unsigned char)(new)),                    \
+			       "0" ((unsigned char)(old))                     \
+			     : "memory");                                     \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_cmpxchg__(char *,int);   \
+		__unsupported_argument_size_for_pl_cmpxchg__(__FILE__,__LINE__); \
+		0;                                                            \
+	})                                                                    \
+)
 
-/* temp = x; x = *ptr ; *ptr += temp */
-static inline unsigned long pl_xadd(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock xaddl %0, %1\n"
-		     :  "=r" (x), "+m" (*ptr)
-		     : "0" (x)
-		     : "memory");
-	return x;
-}
-
-/* exchange <x> with <*ptr> and return previous contents of <*ptr> */
-static inline unsigned long pl_xchg(volatile unsigned long *ptr, unsigned long x)
-{
-	asm volatile("lock xchg %0,%1"
-		     : "=r" (x), "+m" (*ptr)
-		     : "0" (x)
-		     : "memory");
-	return x;
-}
-
-/* compare <*ptr> with <old> and exchange with <new> if matches, and return <old>. */
-static inline unsigned long pl_cmpxchg(volatile unsigned long *ptr, unsigned long old, unsigned long new)
-{
-	unsigned long ret;
-
-	asm volatile("lock cmpxchg %2,%1"
-		     : "=a" (ret), "+m" (*ptr)
-		     : "r" (new), "0" (old)
-		     : "memory");
-	return ret;
-}
-
-#endif /* i386|x86_64 */
 #else
 /* generic implementations */
 
@@ -372,81 +416,21 @@ static inline void pl_cpu_relax()
 	asm volatile("" ::: "memory");
 }
 
-/* explicit 32-bit values */
-
-static inline void pl32_inc_noret(volatile unsigned int *ptr)
-{
-	__sync_add_and_fetch(ptr, 1);
-}
-
-static inline void pl32_dec_noret(volatile unsigned int *ptr)
-{
-	__sync_sub_and_fetch(ptr, 1);
-}
-
-static inline unsigned int pl32_inc(volatile unsigned int *ptr)
-{
-	return __sync_add_and_fetch(ptr, 1);
-}
-
-static inline unsigned int pl32_dec(volatile unsigned int *ptr)
-{
-	return __sync_sub_and_fetch(ptr, 1);
-}
-
-static inline unsigned int pl32_add(volatile unsigned int *ptr, unsigned int x)
-{
-	return __sync_add_and_fetch(ptr, x);
-}
-
-static inline unsigned int pl32_sub(volatile unsigned int *ptr, unsigned int x)
-{
-	return __sync_sub_and_fetch(ptr, x);
-}
-
-static inline unsigned int pl32_xadd(volatile unsigned int *ptr, unsigned int x)
-{
-	return __sync_fetch_and_add(ptr, x);
-}
-
-/* explicit long values */
-
-static inline void pl_inc_noret(volatile unsigned long *ptr)
-{
-	__sync_add_and_fetch(ptr, 1);
-}
-
-static inline void pl_dec_noret(volatile unsigned long *ptr)
-{
-	__sync_sub_and_fetch(ptr, 1);
-}
-
-static inline unsigned long pl_inc(volatile unsigned long *ptr)
-{
-	return __sync_add_and_fetch(ptr, 1);
-}
-
-static inline unsigned long pl_dec(volatile unsigned long *ptr)
-{
-	return __sync_sub_and_fetch(ptr, 1);
-}
-
-static inline unsigned long pl_add(volatile unsigned long *ptr, unsigned long x)
-{
-	return __sync_add_and_fetch(ptr, x);
-}
-
-static inline unsigned long pl_sub(volatile unsigned long *ptr, unsigned long x)
-{
-	return __sync_sub_and_fetch(ptr, x);
-}
-
-static inline unsigned long pl_xadd(volatile unsigned long *ptr, unsigned long x)
-{
-	return __sync_fetch_and_add(ptr, x);
-}
+#define pl_inc_noret(ptr)     ({ __sync_add_and_fetch((ptr), 1);   })
+#define pl_dec_noret(ptr)     ({ __sync_sub_and_fetch((ptr), 1);   })
+#define pl_inc(ptr)           ({ __sync_add_and_fetch((ptr), 1);   })
+#define pl_dec(ptr)           ({ __sync_sub_and_fetch((ptr), 1);   })
+#define pl_add(ptr, x)        ({ __sync_add_and_fetch((ptr), (x)); })
+#define pl_and(ptr, x)        ({ __sync_and_and_fetch((ptr), (x)); })
+#define pl_sub(ptr, x)        ({ __sync_sub_and_fetch((ptr), (x)); })
+#define pl_xadd(ptr, x)       ({ __sync_fetch_and_add((ptr), (x)); })
+#define pl_cmpxchg(ptr, o, n) ({ __sync_val_compare_and_swap((ptr), (o), (n)); })
+#define pl_xchg(ptr, x)       ({ typeof(*(ptr)) t;                                       \
+                                 do { t = *(ptr);                                        \
+                                 } while (!__sync_bool_compare_and_swap((ptr), t, (x))); \
+                                 t;                                                      \
+                              })
 
 #endif
-/* TODO: atomic ops on pointers (eg: lock xadd without length suffix) */
 
 #endif /* PL_ATOMIC_OPS_H */
