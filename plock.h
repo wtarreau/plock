@@ -136,6 +136,7 @@
 #define pl_try_r(lock) (                                                                       \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		unsigned long ret = pl_deref_long(lock) & PLOCK64_WL_ANY;                      \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret, 0)) {                                               \
 			ret = pl_xadd((lock), PLOCK64_RL_1) & PLOCK64_WL_ANY;                  \
 			if (__builtin_expect(ret, 0))                                          \
@@ -144,6 +145,7 @@
 		!ret; /* return value */                                                       \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		unsigned int ret = pl_deref_int(lock) & PLOCK32_WL_ANY;                        \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret, 0)) {                                               \
 			ret = pl_xadd((lock), PLOCK32_RL_1) & PLOCK32_WL_ANY;                  \
 			if (__builtin_expect(ret, 0))                                          \
@@ -176,6 +178,7 @@
 #define pl_try_s(lock) (                                                                       \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		unsigned long ret = pl_deref_long(lock);                                       \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) {           \
 			ret = pl_xadd((lock), PLOCK64_SL_1 | PLOCK64_RL_1) &                   \
 			      (PLOCK64_WL_ANY | PLOCK64_SL_ANY);                               \
@@ -185,6 +188,7 @@
 		!ret; /* return value */                                                       \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		unsigned int ret = pl_deref_int(lock);                                         \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) {           \
 			ret = pl_xadd((lock), PLOCK32_SL_1 | PLOCK32_RL_1) &                   \
 			      (PLOCK32_WL_ANY | PLOCK32_SL_ANY);                               \
@@ -230,10 +234,12 @@
 #define pl_stow(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		unsigned long ret = pl_xadd((lock), PLOCK64_WL_1);                             \
+		pl_barrier();                                                                  \
 		while ((ret & PLOCK64_RL_ANY) != PLOCK64_RL_1)                                 \
 			ret = pl_deref_long(lock);                                             \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		unsigned int ret = pl_xadd((lock), PLOCK32_WL_1);                              \
+		pl_barrier();                                                                  \
 		while ((ret & PLOCK32_RL_ANY) != PLOCK32_RL_1)                                 \
 			ret = pl_deref_int(lock);                                              \
 	}) : ({                                                                                \
@@ -284,6 +290,7 @@
 #define pl_try_w(lock) (                                                                       \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		unsigned long ret = pl_deref_long(lock);                                       \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) {           \
 			ret = pl_xadd((lock), PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);     \
 			if (__builtin_expect(ret & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) {    \
@@ -301,6 +308,7 @@
 		!ret; /* return value */                                                       \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		unsigned int ret = pl_deref_int(lock);                                         \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) {           \
 			ret = pl_xadd((lock), PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);     \
 			if (__builtin_expect(ret & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) {    \
@@ -350,6 +358,7 @@
 #define pl_try_rtos(lock) (                                                                    \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		unsigned long ret = pl_deref_long(lock);                                       \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) {           \
 			ret = pl_xadd((lock), PLOCK64_SL_1) &                                  \
 			      (PLOCK64_WL_ANY | PLOCK64_SL_ANY);                               \
@@ -359,6 +368,7 @@
 		!ret; /* return value */                                                       \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		unsigned int ret = pl_deref_int(lock);                                         \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) {           \
 			ret = pl_xadd((lock), PLOCK32_SL_1) &                                  \
 			      (PLOCK32_WL_ANY | PLOCK32_SL_ANY);                               \
@@ -385,6 +395,7 @@
 #define pl_try_a(lock) (                                                                       \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		unsigned long ret = pl_deref_long(lock) & PLOCK64_SL_ANY;                      \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret, 0)) {                                               \
 			ret = pl_xadd((lock), PLOCK64_WL_1);                                   \
 			while (1) {                                                            \
@@ -401,6 +412,7 @@
 		!ret; /* return value */                                                       \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		unsigned int ret = pl_deref_int(lock) & PLOCK32_SL_ANY;                        \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret, 0)) {                                               \
 			ret = pl_xadd((lock), PLOCK32_WL_1);                                   \
 			while (1) {                                                            \
@@ -448,6 +460,7 @@
 #define pl_try_rtoa(lock) (                                                                    \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		unsigned long ret = pl_deref_long(lock) & PLOCK64_SL_ANY;                      \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret, 0)) {                                               \
 			ret = pl_xadd((lock), PLOCK64_WL_1 - PLOCK64_RL_1);                    \
 			while (1) {                                                            \
@@ -464,6 +477,7 @@
 		!ret; /* return value */                                                       \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		unsigned int ret = pl_deref_int(lock) & PLOCK32_SL_ANY;                        \
+		pl_barrier();                                                                  \
 		if (!__builtin_expect(ret, 0)) {                                               \
 			ret = pl_xadd((lock), PLOCK32_WL_1 - PLOCK32_RL_1);                    \
 			while (1) {                                                            \
