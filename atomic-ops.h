@@ -2,6 +2,12 @@
 #define PL_ATOMIC_OPS_H
 
 
+/* compiler-only memory barrier, for use around locks */
+static inline void pl_barrier()
+{
+	asm volatile("" ::: "memory");
+}
+
 #if defined(__i386__) || defined (__i486__) || defined (__i586__) || defined (__i686__) || defined (__x86_64__)
 
 /*
@@ -10,7 +16,7 @@
 
 static inline void pl_cpu_relax()
 {
-	asm volatile("rep;nop\n" ::: "memory");
+	asm volatile("rep;nop\n");
 }
 
 /* increment integer value pointed to by pointer <ptr>, and return non-zero if
@@ -413,7 +419,7 @@ static inline void pl_cpu_relax()
 
 static inline void pl_cpu_relax()
 {
-	asm volatile("" ::: "memory");
+	asm volatile("");
 }
 
 #define pl_inc_noret(ptr)     ({ __sync_add_and_fetch((ptr), 1);   })
