@@ -251,6 +251,66 @@ static inline void pl_cpu_relax()
 	}                                                                     \
 })
 
+/* binary or integer value pointed to by pointer <ptr> with constant <x>, no
+ * return. Size of <x> is not checked.
+ */
+#define pl_or(ptr, x) ({                                                      \
+	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
+		asm volatile("lock orq %1, %0\n"                              \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned long)(x))                      \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 4) {                                     \
+		asm volatile("lock orl %1, %0\n"                              \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned int)(x))                       \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 2) {                                     \
+		asm volatile("lock orw %1, %0\n"                              \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned short)(x))                     \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 1) {                                     \
+		asm volatile("lock orb %1, %0\n"                              \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned char)(x))                      \
+			     : "cc");                                         \
+	} else {                                                              \
+		void __unsupported_argument_size_for_pl_or__(char *,int);     \
+		__unsupported_argument_size_for_pl_or__(__FILE__,__LINE__);   \
+	}                                                                     \
+})
+
+/* binary xor integer value pointed to by pointer <ptr> with constant <x>, no
+ * return. Size of <x> is not checked.
+ */
+#define pl_xor(ptr, x) ({                                                     \
+	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
+		asm volatile("lock xorq %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned long)(x))                      \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 4) {                                     \
+		asm volatile("lock xorl %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned int)(x))                       \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 2) {                                     \
+		asm volatile("lock xorw %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned short)(x))                     \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 1) {                                     \
+		asm volatile("lock xorb %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned char)(x))                      \
+			     : "cc");                                         \
+	} else {                                                              \
+		void __unsupported_argument_size_for_pl_xor__(char *,int);    \
+		__unsupported_argument_size_for_pl_xor__(__FILE__,__LINE__);  \
+	}                                                                     \
+})
+
 /* test and set bit <bit> in integer value pointed to by pointer <ptr>. Returns
  * 0 if the bit was not set, or ~0 of the same type as *ptr if it was set. Note
  * that there is no 8-bit equivalent operation.
@@ -428,6 +488,8 @@ static inline void pl_cpu_relax()
 #define pl_dec(ptr)           ({ __sync_sub_and_fetch((ptr), 1);   })
 #define pl_add(ptr, x)        ({ __sync_add_and_fetch((ptr), (x)); })
 #define pl_and(ptr, x)        ({ __sync_and_and_fetch((ptr), (x)); })
+#define pl_or(ptr, x)         ({ __sync_or_and_fetch((ptr), (x));  })
+#define pl_xor(ptr, x)        ({ __sync_xor_and_fetch((ptr), (x)); })
 #define pl_sub(ptr, x)        ({ __sync_sub_and_fetch((ptr), (x)); })
 #define pl_xadd(ptr, x)       ({ __sync_fetch_and_add((ptr), (x)); })
 #define pl_cmpxchg(ptr, o, n) ({ __sync_val_compare_and_swap((ptr), (o), (n)); })
