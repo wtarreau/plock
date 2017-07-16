@@ -10,13 +10,6 @@ static inline void pl_cpu_relax()
 	asm volatile("rep;nop\n" ::: "memory");
 }
 
-static inline void pl_cpu_relax_long(unsigned long cycles)
-{
-	do {
-		pl_cpu_relax();
-	} while (--cycles);
-}
-
 /* increment value and return non-zero if result is non-null */
 static inline unsigned char pl_inc(volatile unsigned long *ptr)
 {
@@ -130,13 +123,6 @@ static inline unsigned long pl_cmpxchg(volatile unsigned long *ptr, unsigned lon
 static inline void pl_cpu_relax()
 {
 	asm volatile("rep;nop\n" ::: "memory");
-}
-
-static inline void pl_cpu_relax_long(unsigned long cycles)
-{
-	do {
-		pl_cpu_relax();
-	} while (--cycles);
 }
 
 /* increment value and return non-zero if result is non-null */
@@ -288,13 +274,6 @@ static inline unsigned long pl_xadd(volatile unsigned long *ptr, unsigned long x
 static inline void pl_cpu_relax()
 {
 	asm volatile("" ::: "memory");
-}
-
-static inline void pl_cpu_relax_long(unsigned long cycles)
-{
-	do {
-		pl_cpu_relax();
-	} while (--cycles);
 }
 
 #endif
