@@ -1,344 +1,249 @@
-2017-02-19 - Upgradable locks
------------------------------
+2017-02-19 - Progressive locks
+------------------------------
 
 
-Principle
----------
+Overview
+--------
 
 When dealing with complex structures such as trees, maintaining a write lock
 on a tree during write operations is expensive because most of the time is
 spent looking up the entry to modify and very little time is spent modifying
-the entry, so during this time no read operation may be performed.
+the entry, so during this time no read operation may be performed. In addition,
+there exist some complex structures which support atomic operations on partial
+areas, but for which other operations require global consistency. Everything
+involving ordered writes of multiple fields in a struct falls into this
+category.
 
-The "upgradable" lock tries to address this issue by having 5 levels of locking
-for a shared resource :
+The approach taken here is to keep locks loose in general and to tighten them
+up when approaching the critical section, hence the name "progressive locks".
+All these locks are implemented as includable C macros so the only thing a
+program needs to use them is to include "plock.h" and make use of the various
+pl_* macros described below.
 
-  - unlocked                (or UL)
-  - read-only shared access (or RS for read shared)
-  - seek access             (or MS for modify shared, indicating a write intent)
-  - exclusive write access  (or WX for write exclusive)
-  - an atomic write access  (or WA for write atomic)
+
+Principles of operations
+------------------------
+
+Progressive locks have 5 states :
+
+  - U: unlocked      : nobody claims the lock
+  - R: read-locked   : some users are reading the shared resource
+  - S: seek-locked   : reading is OK but nobody else may seek nor write
+  - W: write-locked  : exclusive access for writing (direct or after S)
+  - A: atomic        : some atomic updates are being performed
+
+The U, R and W state are the common states for classical R/W locks. The S state
+is an intermediary step between R and W, which still allows readers to enter,
+but rejects other W and S requests and guarantees a quick upgrade to (as well
+as return from) the W state. The S lock also makes it possible to implement
+some "lockless" operations following a "single-writer multiple-readers" model
+where a single careful writer can perform changes without preventing readers
+from accessing the data. The A state is for atomic operations mainly consisting
+in ordered writes, that can be performed in parallel but must not be mixed with
+R, S nor W.
+
+The S lock cannot be taken if another S or W lock is already held. But once the
+S lock is held, the owner is automatically granted the right to upgrade it to W
+without checking for other writers. And it can take and release the W lock
+multiple times atomically if needed. It must only wait for last readers to
+leave.
+
+The A lock supports concurrent write accesses and is used when certain atomic
+operations can be performed on a structure which also supports non-atomic
+operations. It is exclusive with the other locks. It is weaker than the S/W
+locks (S being a promise of upgradability), and will wait for any readers to
+leave before proceeding.
 
 The rights and expectations these locks impose to their users are the
 following :
-  - unlocked
-    - owner may not access the protected structure at all.
-    - owner may attempt to take any lock
-    - others may do what they want with it
-    - others may take any lock
 
-  - read-shared
+  - unlocked (U)
+    - nobody may perform visible modifications to the protected area at all
+    - anybody can read the protected area at their own risk
+    - anybody may immediately turn the lock to any other state
+
+  - read-locked (R)
+    - requester must wait for writers to leave before being granted the lock
     - owner may read any location from the protected structure without any
       requirement for ordering ;
-    - owner must wait for writers to leave before being granted the lock
-    - others may take a read lock or a modify-shared lock
     - others may read any location from the protected structure without any
       requirement for ordering ;
-    - others may take any form of write lock but will first have to wait for
-      readers to leave before proceeding with writes ;
+    - others may also be granted an R lock
+    - one other user may also be granted an S lock
+    - one other may take a W lock but will first have to wait for all readers
+      to leave before proceeding with writes ;
 
-  - seek-shared
+  - seek-locked (S)
+    - requester must wait for writers and seekers to leave before being granted
+      the lock
     - owner may read any location from the protected structure without any
       requirement for ordering ;
-    - owner must wait for writers and for other seekers to leave before being
-      granted the lock ;
-    - owner may upgrade the lock to a write lock at any instant without prior
+    - others may read any location from the protected structure without any
+      requirement for ordering ;
+    - others may also be granted an R lock
+    - owner may upgrade the lock to a W lock at any instant without prior
       notification ;
     - owner must wait for readers to leave after the lock is upgraded before
       performing any write ;
     - owner may release the lock without performing an upgrade ;
-    - owner may also downgrade the lock to a read-shared lock ;
-    - others may take a read lock only
-    - others may read any location from the protected structure without any
-      requirement for ordering ;
+    - owner may also downgrade the S lock to an R lock ;
 
-  - write-exclusive
-    - owner must wait for writers and for seekers to leave before being granted
-      the lock (this is guaranted when upgrading from seek-shared) ;
-    - owner must wait for readers to leave after the lock is granted before
-      performing any write ;
+  - write-locked (W)
+    - requester must wait for writers and seekers to leave before being granted
+      the lock (this is guaranteed when upgrading from S)
+    - others may not try to grab any lock once this lock is held
+    - the lock is granted once all other users have left
     - owner may perform any modification to the protected structure ;
-    - owner may downgrade the lock to a modify-shared lock ;
-    - owner may downgrade the lock to a read-shared lock ;
-    - others may not take any lock ;
     - others may not access the protected structure at all ;
+    - owner may downgrade the lock to an S lock ;
+    - owner may downgrade the lock to an R lock ;
 
-  - write-atomic
-    - owner must wait for writers and for seekers to leave before being
-      granted the lock, but doesn't exclude other write-atomic users ;
-    - owner must wait for readers to leave after the lock is granted before
-      performing any write ;
-    - owner must be very careful during reads so that any supported atomic
-      operation has no functional impact on its access (may detect the change
-      and perform a retry) ;
+  - atomic (A)
+    - requester must wait for writers and seekers to leave before being granted
+      the lock, but doesn't exclude other write-atomic users ;
+    - the lock is granted once all other users have left
+    - owner is not guaranteed to be alone since other users may hold the A lock
+      in parallel and perform modifications at the same time ; observations and
+      retries might be necessary to complete certain operations ;
     - owner may only carefully apply modifications to the protected structure
       using atomic operations and memory barriers in a way that is compatible
       with its own usage ;
-    - others may only hold the same write-atomic lock
     - others may only carefully apply modifications to the protected structure
       using atomic operations and memory barriers in a way that is compatible
       with others' usage ;
     - the protections involved with this type of lock are 100% application
-      specific. Most commonly this will be used to remove an element from a
-      list using atomic operations and all compatible functions will use this
-      lock instead of any of the 3 above.
+      specific. Most commonly this will be used to reinitialize some elements,
+      release a series of pointers using atomic operations and all compatible
+      functions will use this lock instead of any of the 3 above.
 
-The upgradable read access is an intermediary state between the read only
-shared access and the write access. It is used only during the seeking phase
-necessary to locate the place to perform some changes. It allows other regular
-readers to access the resource. Once the resource is located, it is turned into
-an exclusive write access, and once all readers are gone, the change can be
-performed. Due to its nature, this lock's "upgradability" is guaranted by
-design. This rule implies that this type of lock is exclusive against itself,
-which means that it is not allowed for two writers to use this one at the same
-time (otherwise the structure of the tree may become inconsistent across the
-lock).
-
-The compatiblity matrix looks like this for any two threads :
-
-                      thread 1
-
-                | UL | RS | MS | WX  | WA
-           -----+----+----+----+-----+-----
-             UL |  X |  X |  X |  X  |  X
-           -----+----+----+----+-----+-----
-             RS |  X |  X |  X |     |
-  thread 2 -----+----+----+----+-----+-----
-             MS |  X |  X |    |     |
-           -----+----+----+----+-----+-----
-             WX |  X |    |    |     |
-           -----+----+----+----+-----+-----
-             WA |  X |    |    |     |  X
-           -----+----+----+----+-----+-----
+The compatiblity between all types of locks is given by the following matrix
+which indicates how many locks of each type may be held for each lock state :
 
 
-The S and A locks are very special in that they are not fully exclusive :
-
-
-             Concurrent accesses allowed
-  Current
-  state   |   U  |   R  |   S  |   W  |   A
-     -----+------+------+------+------+-------
-       U  | 0..N | 0..N | 0..1 | 0..1 | 0..N
-     -----+------+------+------+------+-------
-       R  | 0..N | 0..N | 0..1 |   0  |   0
-     -----+------+------+------+------+-------
-       S  | 0..N | 0..N |   0  |   0  |   0
-     -----+------+------+------+------+-------
-       W  | 0..N |   0  |   0  |   0  |   0
-     -----+------+------+------+------+-------
-       A  | 0..N |   0  |   0  |   0  | 0..N
-     -----+------+------+------+------+-------
-
-
-Note: it's still hard to find short names which unambiguously match the various
-      use cases :
-        - the read-only access may be qualified as "Shared Read", "Read Only",
-          "Shared Access", "Read Lookup", "Read Traversal", "Read Lock" ;
-
-        - the upgradable shared access may be qualified as "Write Traversal",
-          "Write Lookup", "Write Request", "Shared Write", "Pending Write",
-          "Write Intent", "Partially Locked", "Read Modify", "Modify Access",
-          "Limited Access", "Reserved Access", "Seek Access" ;
-
-        - the exclusive write access may be qualified as "Exclusive Write",
-          "Write Commit", "Write Access", "Exclusive Access", "Write Lock" ;
-
-        - the atomic write access may be qualified as "Delete", "Unlink",
-          "Shared Write" ;
-
-It could also be easier to consider states 0 to 3 for unlocked to exclusively
-locked.
-
-In practice, it is useful to understand all states including the transient ones
-as shown below :
-
-    W   M   R   State
-  ----+---+---+------------
-    0 | 0 | 0 | Unlocked
-    0 | 0 |>0 | Shared access
-    0 | 1 |>1 | Limited access
-    0 |>1 | X | Limited access, conflict (transient)
-    1 | 0 |>1 | Exclusive write access requested
-    1 | 0 | 1 | Exclusive write access granted
-    1 | 0 |>0 | Atomic write access requested
-    1 | 0 | 0 | Atomic write access granted
+                           Concurrent accesses allowed
+                Current
+                state   |   U  |   R  |   S  |   W  |   A
+                   -----+------+------+------+------+-------
+                     U  | 0..N | 0..N | 0..1 | 0..1 | 0..N
+                   -----+------+------+------+------+-------
+                     R  | 0..N | 0..N | 0..1 |   0  |   0
+                   -----+------+------+------+------+-------
+                     S  | 0..N | 0..N |   0  |   0  |   0
+                   -----+------+------+------+------+-------
+                     W  | 0..N |   0  |   0  |   0  |   0
+                   -----+------+------+------+------+-------
+                     A  | 0..N |   0  |   0  |   0  | 0..N
+                   -----+------+------+------+------+-------
 
 
 Implementation
 --------------
 
-In terms of implementation, these states are turned into "no more XXX" bits :
+All upgrade attempts may be reverted and are reverted in case of failure, so
+in the worst case very few concurrent accesses are observed, and the bits read
+represent a combination of a granted state and an attempt to take a lock. Lock
+operations take care of checking the lock's value without locking prior to
+trying to grab it so that write operations do not happen while a lock is held.
 
-  - RS = "no more writes"
-  - MS = "no more modifications nor writes"
-  - WX = "no more accesses"
-  - WA = "no more non-atomic accesses"
+Most lock upgrades are performed in two phases :
+  - request the lock
+  - wait for previous incompatible users to leave
 
-Thus the resource is effectively locked in a given state after the condition
-is realized. So there is always a transition period between one state and
-another during which the caller of the lock has to wait for the condition to
-be satisfied, as could be translated in the pseudo language below, describing
-some atomic sequences of operations :
+The locks are implemented using cumulable bit fields representing from the
+lowest to the highest bits :
+  - the number of readers (read, seek, write)
+  - the number of seek requests
+  - the number of write requests
 
-   lock_rs() {
-      wait_for_no_more_writer();
-      inc_reader_count();
-   }
+Each regular lock (R, S, W) counts as a reader. Since all of them may operate
+on a concurrent read, the maximum number of concurrent threads supported is
+dictated by the number of bits used to encode the readers.
 
-   lock_ms() {
-      wait_for_no_more_writer_nor_modifier();
-      inc_modifier_count();
-   }
+Since the writers are totally exclusive to any other activity, they require the
+same number of bits in order to accept the worst possibly imaginable scenario
+where all threads would request a write lock at the exact same instant so the
+number of bits used to represent writers is the same as the number used to
+represent the number of readers.
 
-   lock_wx() {
-      inc_modifier_count();
-      wait_for_no_more_access();
-   }
+The number of seek requests remains on a low bit count and this number is
+placed just below the write bit count so that if it overflows, it temporarily
+overflows into the write bits and appears as requesting an exclusive write
+access. This allows the number of seek bits to remain very low, 1 technically,
+but 2 to avoid needless lock/unlock sequences during common conflicts.
 
-These operations can be performed using atomic additions into a single integer
-holding rs_count, ms_count and wx_count, provided that the current state is
-known :
+In terms of representation, we have this :
+  - R lock is made of the R bit
+  - S lock is made of S + R bits
+  - W lock is made of W + S + R bits
+  - A lock is made of W bits only
 
-  - lock_ul_to_rs <=> lock += rs_lock;
-  - lock_ul_to_ms <=> lock += ms_lock;
-  - lock_ul_to_wx <=> lock += wx_lock;
-  - lock_ms_to_wx <=> lock += wx_lock - ms_lock;
-  - unlock_rs     <=> lock -= rs_lock;
-  - unlock_ms     <=> lock -= ms_lock;
-  - unlock_wx     <=> lock -= wx_lock;
+Due to W being made of W + S + R, and S overflowing into W, each time a W lock
+is directly taken, both W and S bits are added resulting in the W field growing
+faster than the number of write requests. Indeed, with two bits for S below W,
+the W:S word is increased by 0b101 = 5 while W represents 1/4 of the W:S word,
+so each writer consumes 5/4 of a position. But given that 5 doesn't divide any
+power-of-two quantity, we're guaranteed to always keep at least one non-null
+bit in the W part of the word for any supported number of writers, and given
+that the W lock is stronger than the S lock, other access types are protected.
+Having only the W bits set in W:S could be confused with the A lock except that
+the A lock doesn't hold the R bits and is exclusive with regular locks so this
+situation is unambiguous as well.
 
-And the resulting value of the lock immediately allows to check for users in
-multiple classes at once.
+In practice, it is useful to understand all states that can be observed in the
+lock, including the transient ones shown below. "N" means "anything greater
+than zero. "M" means "greater than 1 (many)". "X" means "anything including
+zero".
 
-Note, there's no prerequisite that the upgraded lock has the same value as a
-simple exclusive lock. Actually both of them may easily coexist if that's
-easier to deal with. Depending on the architecture it might be easier to test
-some bits at once, and on other architectures it might be preferable to take
-multiple bitfields at once (eg: wx could have rs, ms and wx at the same time).
-For this reason it might be reasonable not to consider that an upgraded lock
-is the same as a pure write lock so that applications take care of using the
-appropriate unlock method.
+    W   S   R   State
+  ----+---+---+------------
+    0 | 0 | 0 | Unlocked
+    0 | 0 | N | N readers (R)
+    0 | 1 | N | one seeker (S) + (N-1) readers (R)
+    0 | M | X | one seeker (S) + new seeker attempt (transient)
+    1 | 1 | 1 | one writer (W)
+    1 | 1 | M | R attempt while W or W attempt while R (transient)
+    N | 0 | 0 | N atomic writers (A)
+    N | 0 | N | A attempt while R or R attempt while A (transient)
+    N | N | N | A attempt while S or S attempt while A (transient)
+    M | M | N | A attempt while W or W attempt while A (transient)
 
-For instance, considering that wx takes ms and rs, we could have :
+The lock can be upgraded and downgraded between various states at the demand of
+the requester :
 
-  lock_wx() <=> lock += wx_lock + ms_lock + rs_lock.
+  - U<->A : pl_take_a() / pl_drop_a()   (adds/subs W)
+  - U<->R : pl_take_r() / pl_drop_r()   (adds/subs R)
+  - U<->S : pl_take_s() / pl_drop_s()   (adds/subs S+R)
+  - U<->W : pl_take_w() / pl_drop_w()   (adds/subs W+S+R)
+  - S<->W : pl_stow()   / pl_wtos()     (adds/subs W)
+  - S->R  : pl_stor()                   (subs S)
+  - W->R  : pl_wtor()                   (subs W+S)
 
-Testing for unicity here is simple, it consists in checking for any rs_lock
-value greater than 1, which is still compatible with the use of a bit field.
-For example if there are 16 bits for the rs_lock, testing for > 1 is equivalent
-to testing for >= 2, which is testing against mask 0xfffe.
+Other transitions are permitted in opportunistic mode, such as R to A, but are
+not guaranteed to succeed.
 
-In this case the rs_lock counter could in fact be seen as a user counter or a
-visitor counter.
+Progressive locks are defined to be used on various data types including 32 and
+64 bit integers as well as pointers. Special care was taken not to touch the
+two lowest bits of the locked data, which remain available for the application,
+eg for typed pointers or end of list markers. With the lowest two bits removed,
+we can have this distribution :
 
-One difficulty with 3 fields like this is that for any given lock counter, it
-has to be divided in 3 equal parts. For 30 bits, it leaves only 10 bits per
-part, implying only 1023 users. For 62 bits, it's 20 bits per part, or 1048575
-users. One point is that while there may be many concurrent readers, there will
-only be some concurrent attempts to read and some concurrent attempts to write,
-unless we make it mandatory to request a write before upgrading it. In practice
-only one writer will be present at most, so one bit should be enough, but since
-it would require two operations that's not optimal. And we can't accept the
-risk of an overflow on the write part because during a check it would let some
-readers pass through in the middle of a write operation.
-
-However we can in shrink the number of write request bits. Indeed, we have only
-one at once except during attempts to get a write access. But if we have an
-overflow on the write request part, then it leaks into the writers part and
-still maintains the tree protected against any other access. The only side
-effect of such an overflow is that it may temporarily deny access to a pure
-reader for the time it takes to revert the operation, but it never attacks the
-tree's integrity. So we just need to minimize this probability for performance
-purposes. Tests show that using 2 bits here achieves 3% better performance under
-stress (50% read-only, 50% read-update) than a single bit, and the performance
-doesn't increase when going above. With 2 bits we can have up to 3 concurrent
-threads trying to grab the lock without locking reads, so that should be more
-than enough.
-
-Example with 30 bits :
-
+- for 32-bit locks :
   - 31..18 : 14 bits for writers
-  - 17..16 : 2  bits for write requesters
+  - 17..16 : 2  bits for seekers
   - 16..2  : 14 bits for users
+  -  1..0  : 2 bits for the application
+  => up to 16383 users (readers/seekers/writers)
 
-=> up to 13107 writers in the tree or 16383 readers.
-
-With 62 bits :
-
-  - 30 bits for writers
-  - 2  bits for requesters
-  - 30 bits for users
-  => ~850M writers, ~1.07B readers
-
-or :
-
-  - 28 bits for writers
-  - 6  bits for requesters
-  - 28 bits for users
-  => 264 million writers, 268 million readers
-
-It might be possible to make the number of bits in the middle configurable so
-that depending on the write-to-read ratio we can further limit the risk of
-collisions, or instead increase the ability to support larger thread counts.
-For example having 0 bits for write requesters in the 30-bit design allows up
-to 32767 threads to coexist. And similarly, any count above this turns the
-operation into an apparent write access due to users bit leaking into the
-writers bits, causing the operation to be reverted.
-
-The list of possible transitions follows :
-
-  - unlocked ---> shared access
-
-      lock_ul_to_shared() {
-        while (xadd(lock, R) & W) {
-          xadd(lock, -R);
-          while (lock & W)
-            pause();
-        }
-      }
-
-      lock_ul_to_limited() {
-        while (xadd(lock, M|R) & (M|W)) {
-          xadd(lock, -(M|R));
-          while (lock & (M|W))
-            pause();
-        }
-      }
-
-      lock_ul_to_exclusive() {
-        while (xadd(lock, W|M|R) & W) {
-          xadd(lock, -(W|M|R));
-          while (lock & W)
-            pause();
-        }
-        while (lock & R & -2)
-          pause();
-      }
-
-      lock_lim_to_exclusive() {
-        while (xadd(lock, W) & W) {
-          xadd(lock, -W);
-          while (lock & W)
-            pause();
-        }
-        while (lock & R & -2)
-          pause();
-      }
-
-      lock_shr_to_exclusive() {
-        while (xadd(lock, W|M) & W) {
-          xadd(lock, -(W|M));
-          while (lock & W)
-            pause();
-        }
-        while (lock & R & -2)
-          pause();
-      }
+- for 64-bit locks :
+  - 63..34 : 30 bits for writers
+  - 33..32 : 2  bits for seekers
+  - 31..2  : 30 bits for users
+  -  1..0  : 2 bits for the application
+  => up to ~1.07B users (readers/seekers/writers)
 
 
-Application
------------
+Application to a tree
+---------------------
 
 A typical use case is for ebtrees in order to secure the following operations :
   - node *insert(tree, node) : insert node <node> into tree <tree>, return
@@ -354,31 +259,31 @@ A typical use case is for ebtrees in order to secure the following operations :
 
 Implementation :
   - insert(tree, node) {
-        lock_ms(tree);
+        pl_take_s(tree); // take S
         walk_down_to(node->key);
-        lock_ms_to_wx(tree);
+        pl_stow(tree);   // upgrade to W
         insert_node_here(node);
-        unlock_wx(tree);
+        pl_drop_w(tree); // drop
     }
 
   - lookup(tree, key) {
-        lock_rs(tree);
+        pl_take_r(tree); // take R
         walk_down_to(key);
-        unlock_rs(tree);
+        pl_drop_r(tree); // drop
     }
 
   - delete(tree, node) {
-        lock_wx(tree);
+        pl_take_w(tree);  // take W
         delete_node(node);
-        unlock_wx(tree);
+        pl_drop_w(tree);  // drop
     }
 
   - pick(tree, key) {
-        lock_ms(tree);
+        pl_take_s(tree);  // take S
         walk_down_to(key);
-        lock_ms_to_wx(tree);
+        pl_stow(tree);    // upgrade to W
         delete_node(node);
-        unlock_wx(tree);
+        pl_wtos(tree);    // drop
     }
 
 For some applications like a scheduler, all operations will be either pick() or
@@ -393,7 +298,7 @@ in retryable lookups + deletes :
 
 This will also ensure atomicity during the pick up period while not locking the
 whole tree during the descent. And since the lookup() is compatible with the
-lock_ms() used during the descent for the insert() operation, most operations
+S lock used during the descent for the insert() operation, most operations
 can be performed in parallel.
 
 Some operations may be performed in multiple steps without completely unlocking
@@ -421,16 +326,16 @@ Then there are some lookup functions applying to the tree :
   - lookup_first(), lookup_last()
   - lookup_key(), ...
 
-These functions may leave the tree in locked read or locked modified state.
+Such functions may leave the tree locked in R or S states.
 
 Then some functions modify the tree and may leave it in a still modifiable
-state because the write lock has not yet been released ("uncommitted" ?) :
+state because the W lock has not yet been released :
 
   - pick(), insert(), delete()
 
 
-Data protection
----------------
+Data protection in a tree
+-------------------------
 
 The method described here only applies to the tree structure, but doesn't
 prevent data from being modified or even released during the lookups. It is
