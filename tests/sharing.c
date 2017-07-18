@@ -26,7 +26,7 @@
 pthread_t thr[MAXTHREADS];
 int arg_nice;
 int arg_am = 0;
-int nbthreads = 2;
+unsigned int nbthreads = 2;
 static volatile unsigned long actthreads;
 static volatile unsigned long step;
 
@@ -38,7 +38,7 @@ unsigned long *locks[MAXTHREADS];
 void oneatwork(void *arg)
 {
 	int thr = (long)arg;
-	long *lock = locks[thr];
+	unsigned long *lock = locks[thr];
 	unsigned long l = 0;
 
 	/* step 0: creating all threads */
@@ -91,7 +91,7 @@ int main(int argc, char **argv)
 {
 	int i, err;
 	unsigned long u;
-	long *work_area;
+	unsigned long *work_area;
 	unsigned long total;
 	unsigned long incr;
 	unsigned long dist;
@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 
 	printf("Dist.   Loops/ms  Incr/ms (loops-per-thread/ms)\n");
 	for (dist = 0; dist < 4096 / sizeof(long); dist = dist ? (dist << 1) : 1) {
-		printf(" %4d: ", dist * sizeof(long));
+		printf(" %4lu: ", dist * sizeof(long));
 
 		for (u = 0; u < nbthreads; u++) {
 			locks[u] = work_area + u * dist;

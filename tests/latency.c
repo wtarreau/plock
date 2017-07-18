@@ -37,7 +37,6 @@ volatile long lock;
 void oneatwork(void *arg)
 {
 	int thr = (long)arg;
-	int loops = 0;
 	long l = lock;
 
 	(void)thr; /* to mark it used */
@@ -164,7 +163,7 @@ int main(int argc, char **argv)
 		start.tv_sec++;
 	}
 	u = i / 1000 + (int)(stop.tv_sec - start.tv_sec) * 1000;
-	printf("threads: %d loops: %d time(ms): %lu rate(lps): %Lu, bounce(ns): %lu\n",
+	printf("threads: %d loops: %lu time(ms): %lu rate(lps): %Lu, bounce(ns): %lu\n",
 	       2, final_work, u, final_work * 1000ULL / u, u * 1000000UL / final_work);
 
 	/* All the work has ended */

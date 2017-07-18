@@ -26,7 +26,7 @@
 pthread_t thr[MAXTHREADS];
 int arg_nice;
 int read_ratio = 256;
-int nbthreads = 2;
+unsigned int nbthreads = 2;
 static volatile unsigned long actthreads;
 static volatile unsigned long step;
 
@@ -39,7 +39,6 @@ volatile long lock;
 void oneatwork(void *arg)
 {
 	int thr = (long)arg;
-	int loops = 0;
 	long l = 0;
 	int do_write = (mask & (1 << thr));
 
@@ -154,7 +153,7 @@ int main(int argc, char **argv)
 	}
 	u = i / 1000 + (int)(stop.tv_sec - start.tv_sec) * 1000;
 
-	for (i = 0; i < nbthreads; i++) {
+	for (i = 0; i < (int)nbthreads; i++) {
 		printf("thread: %2d loops: %10lu time(ms): %lu rate(lps): %10Lu, access(ns): %3lu\n",
 		       i, final_work[i], u, final_work[i] * 1000ULL / u, u * 1000000UL / final_work[i]);
 	}
