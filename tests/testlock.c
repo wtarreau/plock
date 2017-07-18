@@ -13,7 +13,7 @@
  *
  * To compile, you need libpthread :
  *
- * gcc -O2 -fomit-frame-pointer -s -o threads threads.c -lpthread
+ *   gcc -I.. -O2 -fomit-frame-pointer -s -o testlock testlock.c -lpthread
  *
  *
  */
@@ -24,10 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-
-#define main _main
-#include "lock.c"
-#undef main
+#include <plock.h>
 
 #define MAXTHREADS	64
 
@@ -48,7 +45,7 @@ static unsigned int final_work;
 
 void oneatwork(void *arg)
 {
-	int thr = (int)arg;
+	int thr = (long)arg;
 	int loops = 0;
 
 	(void)thr; /* to mark it used */
@@ -60,41 +57,40 @@ void oneatwork(void *arg)
 	}
 
 	/* step 1 : waiting for signal to start */
-	atomic_inc(&actthreads);
+	pl_inc(&actthreads);
 	while (step == 1);
 
 	/* step 2 : running */
 	while (1) {
-		volatile int i;
-
-		ro_lock(&global_lock);
+		pl_take_r(&global_lock);
 		if (shared & (1 << thr))
 			fprintf(stderr, "thr=%d shared=0x%08x : unexpected 1\n", thr, shared);
-		ro_unlock(&global_lock);
+		pl_drop_r(&global_lock);
 
-		if ((loops & 0xFF) < read_ratio) {
-			wr_fast_lock(&global_lock);
+		if ((loops & 0xFF) >= read_ratio) {
+			pl_take_w(&global_lock);
 			shared |= (1 << thr);
-			wr_unlock(&global_lock);
+			pl_drop_w(&global_lock);
+			//pl_or(&shared, (1 << thr));
 
-			mw_lock/*_backoff*/(&global_lock);
+			pl_take_s(&global_lock);
 			if (!(shared & (1 << thr)))
 				fprintf(stderr, "thr=%d shared=0x%08x : unexpected 0\n", thr, shared);
-
-			wr_lock(&global_lock);
+			pl_stow(&global_lock);
 			shared &= ~(1 << thr);
-			wr_unlock(&global_lock);
+			pl_drop_w(&global_lock);
+			//pl_and(&shared, ~(1 << thr));
 		}
 
-		ro_lock(&global_lock);
+		pl_take_r(&global_lock);
 		if (shared & (1 << thr))
 			fprintf(stderr, "thr=%d shared=0x%08x : unexpected 1\n", thr, shared);
-		ro_unlock(&global_lock);
+		pl_drop_r(&global_lock);
 
 		loops++;
 		if (!(loops & 0x7F)) {	/* don't access RAM too often */
-			if (xadd(&global_work, 128) >= 20000000) {
-				if (xadd(&step, 1) == 2) { /* only take the first to end */
+			if (pl_xadd(&global_work, 128) >= 20000000) {
+				if (pl_xadd(&step, 1) == 2) { /* only take the first to end */
 					final_work = global_work;
 					gettimeofday(&stop, NULL);
 				}
@@ -102,21 +98,21 @@ void oneatwork(void *arg)
 			}
 		}
 	}
-	atomic_dec(&actthreads);
+	pl_dec(&actthreads);
 	//fprintf(stderr, "actthreads=%d\n", actthreads);
 	pthread_exit(0);
 }
 
 void usage(int ret)
 {
-	printf("usage: idletime [-h] [-l] [-n nice] [-w wait_time] [-t threads] [-r read_ratio(0..256)]\n");
+	printf("usage: testlock [-h] [-l] [-n nice] [-w wait_time] [-t threads] [-r read_ratio(0..256)]\n");
 	exit(ret);
 }
 
 int main(int argc, char **argv)
 {
 	int i, err;
-	unsigned int u;
+	unsigned long u;
 
 	nbthreads = 1;
 	arg_wait = 1;
@@ -170,13 +166,13 @@ int main(int argc, char **argv)
 		}
 		pthread_detach(thr[u]);
 	}
-	
-	atomic_inc(&step);  /* let the threads warm up and get ready to start */
+
+	pl_inc(&step);  /* let the threads warm up and get ready to start */
 
 	while (actthreads != nbthreads);
 
 	gettimeofday(&start, NULL);
-	atomic_inc(&step); /* fire ! */
+	pl_inc(&step); /* fire ! */
 
 	while (actthreads)
 		usleep(100000);

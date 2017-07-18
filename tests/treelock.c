@@ -13,7 +13,7 @@
  *
  * To compile, you need libpthread :
  *
- * gcc -O2 -fomit-frame-pointer -s -o threads threads.c -lpthread
+ *   gcc -I.. -O2 -fomit-frame-pointer -s -o treelock treelock.c -lpthread
  *
  *
  */
@@ -24,10 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-
-#define main _main
-#include "plock.h"
-#undef main
+#include <plock.h>
 
 #define MAXTHREADS	64
 
@@ -412,7 +409,7 @@ int main(int argc, char **argv)
 		}
 		pthread_detach(thr[u]);
 	}
-	
+
 	pl_inc_noret(&step);  /* let the threads warm up and get ready to start */
 
 	while (actthreads != nbthreads);
