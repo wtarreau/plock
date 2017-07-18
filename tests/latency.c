@@ -63,12 +63,13 @@ void oneatwork(void *arg)
 			while ((l & 2))
 				l = lock;
 
-			l = __atomic_add_fetch(&lock, 5, __ATOMIC_RELAXED);
-
-			while (!(l & 2) && l < (20000000 << 2))
+			pl_add(&lock, 5);
+			do {
 				l = lock;
+			} while (!(l & 2) && l < (20000000 << 2));
 
-			l = __atomic_sub_fetch(&lock, 1, __ATOMIC_RELAXED);
+			pl_sub(&lock, 1);
+			l = lock;
 
 			if (l >= 20000000 << 2)
 				break;
@@ -85,12 +86,13 @@ void oneatwork(void *arg)
 			while (!(l & 1) && l < (20000000 << 2))
 				l = lock;
 
-			l = __atomic_add_fetch(&lock, 6, __ATOMIC_RELAXED);
-
-			while ((l & 1))
+			pl_add(&lock, 6);
+			do {
 				l = lock;
+			} while ((l & 1));
 
-			l = __atomic_sub_fetch(&lock, 2, __ATOMIC_RELAXED);
+			pl_sub(&lock, 2);
+			l = lock;
 
 			if (l >= 20000000 << 2)
 				break;
