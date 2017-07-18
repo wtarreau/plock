@@ -1,0 +1,73 @@
+2017-07-14 - inter-core latency measurements using latency.c
+
+## core i7-6700K @4.4 GHz. c0123.t0 = 0,1,2,3, c0123.t1 = 4,5,6,7.
+willy@pcw:/data/git/public/atomic$ taskset -c 0,1 ./latency
+threads: 2 loops: 20000000 time(ms): 1818 rate(lps): 11001100, bounce(ns): 90
+willy@pcw:/data/git/public/atomic$ taskset -c 0,2 ./latency
+threads: 2 loops: 20000000 time(ms): 1820 rate(lps): 10989010, bounce(ns): 91
+willy@pcw:/data/git/public/atomic$ taskset -c 0,3 ./latency
+threads: 2 loops: 20000000 time(ms): 1777 rate(lps): 11254924, bounce(ns): 88
+willy@pcw:/data/git/public/atomic$ taskset -c 0,4 ./latency
+threads: 2 loops: 20000000 time(ms): 645 rate(lps): 31007751, bounce(ns): 32
+willy@pcw:/data/git/public/atomic$ taskset -c 1,2 ./latency
+threads: 2 loops: 20000000 time(ms): 1714 rate(lps): 11668611, bounce(ns): 85
+willy@pcw:/data/git/public/atomic$ taskset -c 1,3 ./latency
+threads: 2 loops: 20000000 time(ms): 1815 rate(lps): 11019283, bounce(ns): 90
+willy@pcw:/data/git/public/atomic$ taskset -c 2,3 ./latency
+threads: 2 loops: 20000000 time(ms): 1700 rate(lps): 11764705, bounce(ns): 85
+
+## atom N2600 @1.86 GHz. c01.t0 = 0,2, c01.t1 = 1,2. 2*512 kB cache (not shared).
+willy@eeepc:~$ taskset -c 0,1 ./latency-i586
+threads: 2 loops: 20000000 time(ms): 679 rate(lps): 29455081, bounce(ns): 33
+willy@eeepc:~$ taskset -c 0,1 ./latency-i586
+threads: 2 loops: 20000000 time(ms): 681 rate(lps): 29368575, bounce(ns): 34
+willy@eeepc:~$ taskset -c 0,2 ./latency-i586
+threads: 2 loops: 20000000 time(ms): 6158 rate(lps): 3247807, bounce(ns): 93
+willy@eeepc:~$ taskset -c 0,2 ./latency-i586
+threads: 2 loops: 20000000 time(ms): 6160 rate(lps): 3246753, bounce(ns): 93
+willy@eeepc:~$ taskset -c 0,3 ./latency-i586
+threads: 2 loops: 20000000 time(ms): 6169 rate(lps): 3242016, bounce(ns): 93
+
+## RK3288 (Cortex A17 quad) at 1.8 GHz. Shared 1MB L2 cache.
+admin@miqi-2:~$ taskset -c 0,1 /tmp/latency-armv7
+threads: 2 loops: 20000000 time(ms): 1611 rate(lps): 12414649, bounce(ns): 80
+admin@miqi-2:~$ taskset -c 0,1 /tmp/latency-armv7
+threads: 2 loops: 20000000 time(ms): 1603 rate(lps): 12476606, bounce(ns): 80
+admin@miqi-2:~$ taskset -c 0,2 /tmp/latency-armv7
+threads: 2 loops: 20000000 time(ms): 1607 rate(lps): 12445550, bounce(ns): 80
+admin@miqi-2:~$ taskset -c 0,3 /tmp/latency-armv7
+threads: 2 loops: 20000000 time(ms): 1596 rate(lps): 12531328, bounce(ns): 79
+
+## Armada388 (Cortex A9 dual at 2.0 GHz). Shared 1MB L2 cache.
+admin@clearfog:~$ taskset -c 0,1 /tmp/latency-armv7
+threads: 2 loops: 20000000 time(ms): 1097 rate(lps): 18231540, bounce(ns): 54
+
+## atom D510 (dual core) @1.66 GHz. L1+L2 dedicated to each core (2*512kB L2).
+willy@nfs:~$ taskset -c 0,1 /data/git/public/atomic/latency
+threads: 2 loops: 20000000 time(ms): 10355 rate(lps): 1931434, bounce(ns): 517
+
+## H5 (Cortex A53 quad) at 1.5 GHz
+root@odroid-c2:~# taskset -c 0,1 /tmp/latency-arm64
+threads: 2 loops: 20000000 time(ms): 1350 rate(lps): 14814814, bounce(ns): 67
+root@odroid-c2:~# taskset -c 0,2 /tmp/latency-arm64
+threads: 2 loops: 20000000 time(ms): 1352 rate(lps): 14792899, bounce(ns): 67
+root@odroid-c2:~# taskset -c 0,3 /tmp/latency-arm64
+threads: 2 loops: 20000000 time(ms): 1352 rate(lps): 14792899, bounce(ns): 67
+
+# atom x5-z8350 (quad core) => 2 CPU clusters (0,1) and (2,3). Possibly a
+# single cache port per cluster. Frequency was verified to be 1.92 GHz in all
+# cases (supports up to 2 cores at max speed).
+# As per https://en.wikichip.org/wiki/intel/atom_x5/x5-z8350, the L2 cache is
+# 1MB per 2-core hence 2MB total.
+admin@up1:/$ taskset -c 0,1 /tmp/latency
+threads: 2 loops: 20000000 time(ms): 5446 rate(lps): 3672420, bounce(ns): 272
+admin@up1:/$ taskset -c 0,2 /tmp/latency
+threads: 2 loops: 20000000 time(ms): 3685 rate(lps): 5427408, bounce(ns): 184
+admin@up1:/$ taskset -c 0,3 /tmp/latency
+threads: 2 loops: 20000000 time(ms): 3657 rate(lps): 5468963, bounce(ns): 182
+admin@up1:/$ taskset -c 1,2 /tmp/latency
+threads: 2 loops: 20000000 time(ms): 3858 rate(lps): 5184033, bounce(ns): 192
+admin@up1:/$ taskset -c 1,3 /tmp/latency
+threads: 2 loops: 20000000 time(ms): 3656 rate(lps): 5470459, bounce(ns): 182
+admin@up1:/$ taskset -c 2,3 /tmp/latency
+threads: 2 loops: 20000000 time(ms): 5528 rate(lps): 3617945, bounce(ns): 276
