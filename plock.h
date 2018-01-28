@@ -117,12 +117,43 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
-/* request shared read access (R) and wait for it */
+/* request shared read access (R) and wait for it. In order not to disturb a W
+ * lock waiting for all readers to leave, we first check if a W lock is held
+ * before trying to claim the R lock.
+ */
 #define pl_take_r(lock)                                                                        \
-	do {                                                                                   \
-		while (__builtin_expect(pl_try_r(lock), 1) == 0)                               \
-		       pl_cpu_relax();                                                         \
-	} while (0)
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __set_r = PLOCK64_RL_1;                                 \
+		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
+		while (1) {                                                                    \
+			if (__builtin_expect(pl_deref_long(__lk_r) & __msk_r, 0))              \
+				pl_wait_unlock_long(__lk_r, __msk_r);                          \
+			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+				break;                                                         \
+			pl_sub(__lk_r, __set_r);                                               \
+		}                                                                              \
+		pl_barrier();                                                                  \
+		0;                                                                             \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __set_r = PLOCK32_RL_1;                                  \
+		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
+		while (1) {                                                                    \
+			if (__builtin_expect(pl_deref_int(__lk_r) & __msk_r, 0))               \
+				pl_wait_unlock_int(__lk_r, __msk_r);                           \
+			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+				break;                                                         \
+			pl_sub(__lk_r, __set_r);                                               \
+		}                                                                              \
+		pl_barrier();                                                                  \
+		0;                                                                             \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_take_r__(char *,int);                  \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_take_r__(__FILE__,__LINE__);        \
+		0;                                                                             \
+	})
 
 /* release the read access (R) lock */
 #define pl_drop_r(lock) (                                                                      \
@@ -169,12 +200,42 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
-/* request a seek access (S) and wait for it */
+/* request a seek access (S) and wait for it. The lock is immediately claimed,
+ * and only upon failure an exponential backoff is used. S locks rarely compete
+ * with W locks so S will generally not disturb W. As the S lock may be used as
+ * a spinlock, it's important to grab it as fast as possible.
+ */
 #define pl_take_s(lock)                                                                        \
-	do {				                                                       \
-		while (__builtin_expect(pl_try_s(lock), 0) == 0)                               \
-		       pl_cpu_relax();                                                         \
-	} while (0)
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __set_r = PLOCK64_SL_1 | PLOCK64_RL_1;                  \
+		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
+		while (1) {                                                                    \
+			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+				break;                                                         \
+			pl_sub(__lk_r, __set_r);                                               \
+			pl_wait_unlock_long(__lk_r, __msk_r);                                  \
+		}                                                                              \
+		pl_barrier();                                                                  \
+		0;                                                                             \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __set_r = PLOCK32_SL_1 | PLOCK32_RL_1;                   \
+		register unsigned int __msk_r = PLOCK32_WL_ANY | PLOCK32_SL_ANY;               \
+		while (1) {                                                                    \
+			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+				break;                                                         \
+			pl_sub(__lk_r, __set_r);                                               \
+			pl_wait_unlock_int(__lk_r, __msk_r);                                   \
+		}                                                                              \
+		pl_barrier();                                                                  \
+		0;                                                                             \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_take_s__(char *,int);                  \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_take_s__(__FILE__,__LINE__);        \
+		0;                                                                             \
+	})
 
 /* release the seek access (S) lock */
 #define pl_drop_s(lock) (                                                                      \
@@ -313,12 +374,50 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
-/* request a seek access (W) and wait for it */
+/* request a write access (W) and wait for it. The lock is immediately claimed,
+ * and only upon failure an exponential backoff is used.
+ */
 #define pl_take_w(lock)                                                                        \
-	do {				                                                       \
-		while (__builtin_expect(pl_try_w(lock), 0) == 0)                               \
-		       pl_cpu_relax();                                                         \
-	} while (0)
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __set_r = PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1;   \
+		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
+		register unsigned long __pl_r;                                                 \
+		while (1) {                                                                    \
+			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			if (!__builtin_expect(__pl_r & __msk_r, 0))                            \
+				break;                                                         \
+			pl_sub(__lk_r, __set_r);                                               \
+			pl_wait_unlock_long(__lk_r, __msk_r);                                  \
+		}                                                                              \
+		/* wait for all other readers to leave */                                      \
+		while (__builtin_expect(__pl_r, 0))                                            \
+			__pl_r = pl_deref_long(__lk_r) - __set_r;                              \
+		pl_barrier();                                                                  \
+		0;                                                                             \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __set_r = PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1;    \
+		register unsigned int __msk_r = PLOCK32_WL_ANY | PLOCK32_SL_ANY;               \
+		register unsigned int __pl_r;                                                  \
+		while (1) {                                                                    \
+			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			if (!__builtin_expect(__pl_r & __msk_r, 0))                            \
+				break;                                                         \
+			pl_sub(__lk_r, __set_r);                                               \
+			pl_wait_unlock_int(__lk_r, __msk_r);                                   \
+		}                                                                              \
+		/* wait for all other readers to leave */                                      \
+		while (__builtin_expect(__pl_r, 0))                                            \
+			__pl_r = pl_deref_int(__lk_r) - __set_r;                               \
+		pl_barrier();                                                                  \
+		0;                                                                             \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_take_w__(char *,int);                  \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_take_w__(__FILE__,__LINE__);        \
+		0;                                                                             \
+	})
 
 /* drop the write (W) lock entirely */
 #define pl_drop_w(lock) (                                                                      \
@@ -421,12 +520,54 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
-/* request atomic write access (A) and wait for it */
+/* request atomic write access (A) and wait for it. See comments in pl_try_a() for
+ * explanations.
+ */
 #define pl_take_a(lock)                                                                        \
-	do {				                                                       \
-		while (__builtin_expect(pl_try_a(lock), 1) == 0)                               \
-		       pl_cpu_relax();                                                         \
-	} while (0)
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __set_r = PLOCK64_WL_1;                                 \
+		register unsigned long __msk_r = PLOCK64_SL_ANY;                               \
+		register unsigned long __pl_r;                                                 \
+		__pl_r = pl_xadd(__lk_r, __set_r);                                             \
+		while (__builtin_expect(__pl_r & PLOCK64_RL_ANY, 0)) {                         \
+			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
+				pl_sub(__lk_r, __set_r);                                       \
+				pl_wait_unlock_long(__lk_r, __msk_r);                          \
+				__pl_r = pl_xadd(__lk_r, __set_r);                             \
+				continue;                                                      \
+			}                                                                      \
+			/* wait for all readers to leave or upgrade */                         \
+			pl_cpu_relax(); pl_cpu_relax(); pl_cpu_relax();                        \
+			__pl_r = pl_deref_long(lock);                                          \
+		}                                                                              \
+		pl_barrier();                                                                  \
+		0;                                                                             \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __set_r = PLOCK32_WL_1;                                  \
+		register unsigned int __msk_r = PLOCK32_SL_ANY;                                \
+		register unsigned int __pl_r;                                                  \
+		__pl_r = pl_xadd(__lk_r, __set_r);                                             \
+		while (__builtin_expect(__pl_r & PLOCK32_RL_ANY, 0)) {                         \
+			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
+				pl_sub(__lk_r, __set_r);                                       \
+				pl_wait_unlock_int(__lk_r, __msk_r);                           \
+				__pl_r = pl_xadd(__lk_r, __set_r);                             \
+				continue;                                                      \
+			}                                                                      \
+			/* wait for all readers to leave or upgrade */                         \
+			pl_cpu_relax(); pl_cpu_relax(); pl_cpu_relax();                        \
+			__pl_r = pl_deref_int(lock);                                           \
+		}                                                                              \
+		pl_barrier();                                                                  \
+		0;                                                                             \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_take_a__(char *,int);                  \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_take_a__(__FILE__,__LINE__);        \
+		0;                                                                             \
+	})
 
 /* release atomic write access (A) lock */
 #define pl_drop_a(lock) (                                                                      \
