@@ -47,6 +47,48 @@
 /* dereferences <*p> as unsigned int without causing aliasing issues */
 #define pl_deref_int(p) ({ volatile unsigned int *__pl_i = (void *)(p); *__pl_i; })
 
+/* This function waits for <lock> to release all bits covered by <mask>, and
+ * enforces an exponential backoff using CPU pauses to limit the pollution to
+ * the other threads' caches. The progression follows (2^N)-1, limited to 255
+ * iterations, which is way sufficient even for very large numbers of threads.
+ * The function slightly benefits from size optimization under gcc, but Clang
+ * cannot do it, so it's not done here, as it doesn't make a big difference.
+ */
+__attribute__((unused,noinline,no_instrument_function))
+static void pl_wait_unlock_long(const unsigned long *lock, const unsigned long mask)
+{
+	unsigned char m = 0;
+
+	do {
+		unsigned char loops = m + 1;
+		m = (m << 1) + 1;
+		do {
+			pl_cpu_relax();
+		} while (--loops);
+	} while (__builtin_expect(pl_deref_long(lock) & mask, 0));
+}
+
+/* This function waits for <lock> to release all bits covered by <mask>, and
+ * enforces an exponential backoff using CPU pauses to limit the pollution to
+ * the other threads' caches. The progression follows (2^N)-1, limited to 255
+ * iterations, which is way sufficient even for very large numbers of threads.
+ * The function slightly benefits from size optimization under gcc, but Clang
+ * cannot do it, so it's not done here, as it doesn't make a big difference.
+ */
+__attribute__((unused,noinline,no_instrument_function))
+static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask)
+{
+	unsigned char m = 0;
+
+	do {
+		unsigned char loops = m + 1;
+		m = (m << 1) + 1;
+		do {
+			pl_cpu_relax();
+		} while (--loops);
+	} while (__builtin_expect(pl_deref_int(lock) & mask, 0));
+}
+
 /* request shared read access (R), return non-zero on success, otherwise 0 */
 #define pl_try_r(lock) (                                                                       \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
