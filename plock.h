@@ -469,6 +469,62 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 )
 
 
+/* Try to upgrade from R to W, return non-zero on success, otherwise 0.
+ * This lock will fail if S or W are already held. In case of failure to grab
+ * the lock, it MUST NOT be retried without first dropping R, or it may never
+ * complete due to S waiting for R to leave before upgrading to W. It waits for
+ * the last readers to leave.
+ */
+#define pl_try_rtow(lock) (                                                                    \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __set_r = PLOCK64_WL_1 | PLOCK64_SL_1;                  \
+		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
+		register unsigned long __pl_r;                                                 \
+		pl_barrier();                                                                  \
+		while (1) {                                                                    \
+			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
+				if (pl_xadd(__lk_r, - __set_r))                                \
+					break; /* the caller needs to drop the lock now */     \
+				continue;  /* lock was released, try again */                  \
+			}                                                                      \
+			/* ok we're the only writer, wait for readers to leave */              \
+			while (__builtin_expect(__pl_r, 0))                                    \
+				__pl_r = pl_deref_long(__lk_r) - (PLOCK64_WL_1|PLOCK64_SL_1|PLOCK64_RL_1); \
+			/* now return with __pl_r = 0 */                                       \
+			break;                                                                 \
+		}                                                                              \
+		!__pl_r; /* return value */                                                    \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __set_r = PLOCK32_WL_1 | PLOCK32_SL_1;                   \
+		register unsigned int __msk_r = PLOCK32_WL_ANY | PLOCK32_SL_ANY;               \
+		register unsigned int __pl_r;                                                  \
+		pl_barrier();                                                                  \
+		while (1) {                                                                    \
+			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
+				if (pl_xadd(__lk_r, - __set_r))                                \
+					break; /* the caller needs to drop the lock now */     \
+				continue;  /* lock was released, try again */                  \
+			}                                                                      \
+			/* ok we're the only writer, wait for readers to leave */              \
+			while (__builtin_expect(__pl_r, 0))                                    \
+				__pl_r = pl_deref_int(__lk_r) - (PLOCK32_WL_1|PLOCK32_SL_1|PLOCK32_RL_1); \
+			/* now return with __pl_r = 0 */                                       \
+			break;                                                                 \
+		}                                                                              \
+		!__pl_r; /* return value */                                                    \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_try_rtow__(char *,int);                \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_try_rtow__(__FILE__,__LINE__);      \
+		0;                                                                             \
+	})                                                                                     \
+)
+
+
 /* request atomic write access (A), return non-zero on success, otherwise 0.
  * It's a bit tricky as we only use the W bits for this and want to distinguish
  * between other atomic users and regular lock users. We have to give up if an
