@@ -606,6 +606,60 @@ void loop_mode7(void)
 	}
 }
 
+/* read: R, delete: RTOW|lookup(W)+delete(W), insert: W */
+void loop_mode8(void)
+{
+	unsigned int k;
+	struct cache_item *c, *tmp;
+	char str[STRSZ];
+
+	while (step == 2) {
+		k = rnd32_range(arg_key_space);
+
+		/* lookup */
+		pl_take_r(&cache_lock.plock);
+		if ((c = cache_lookup(k))) {
+			/* entry found, let's use it */
+			memcpy(str, c->str, sizeof(str));
+			pl_drop_r(&cache_lock.plock);
+			goto done;
+		}
+		pl_drop_r(&cache_lock.plock);
+
+		/* miss: produce the expensive data locally */
+		thread_misses++;
+		produce_data(k, str, sizeof(str));
+
+		/* now try to store the new data. It's possible that the
+		 * same key was inserted in the mean time. If so we have
+		 * to remove it.
+		 */
+		if ((c = cache_alloc())) {
+			c->key = k;
+			memcpy(c->str, str, sizeof(str));
+
+			pl_take_r(&cache_lock.plock);
+			tmp = cache_lookup(k);
+			if (!pl_try_rtow(&cache_lock.plock)) {
+				/* S or W already claimed, must drop R first */
+				pl_drop_r(&cache_lock.plock);
+				pl_take_w(&cache_lock.plock);
+				tmp = cache_lookup(k);
+			}
+			/* W lock held here */
+			if (tmp)
+				cache_delete(tmp);
+			cache_insert(c);
+			cache_trim();
+			pl_drop_w(&cache_lock.plock);
+		}
+	done:
+		if (consume_data(k, str) < 0)
+			exit(1);
+		thread_total_work++;
+	}
+}
+
 /* main thread preparation */
 void oneatwork(int thr)
 {
@@ -632,6 +686,7 @@ void oneatwork(int thr)
 	case 5: loop_mode5(); break;
 	case 6: loop_mode6(); break;
 	case 7: loop_mode7(); break;
+	case 8: loop_mode8(); break;
 	}
 
 	/* only time the first finishing thread */
@@ -658,6 +713,7 @@ void usage(int ret)
 	       "  5 : plock R lock for lookup, W for insertion\n"
 	       "  6 : plock R lock for lookup, S->W for insertion\n"
 	       "  7 : plock R lock for lookup, R->S->W for insertion\n"
+	       "  8 : plock R lock for lookup, R->W for insertion\n"
 	       "\n");
 	exit(ret);
 }
