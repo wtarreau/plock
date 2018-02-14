@@ -85,8 +85,10 @@
 /* release the read access (R) lock */
 #define pl_drop_r(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK64_RL_1);                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_RL_1);                                                    \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_r__(char *,int);                  \
@@ -135,8 +137,10 @@
 /* release the seek access (S) lock */
 #define pl_drop_s(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK64_SL_1 + PLOCK64_RL_1);                                     \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_SL_1 + PLOCK32_RL_1);                                     \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_s__(char *,int);                  \
@@ -148,8 +152,10 @@
 /* drop the S lock and go back to the R lock */
 #define pl_stor(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK64_SL_1);                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_SL_1);                                                    \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_stor__(char *,int);                    \
@@ -162,14 +168,14 @@
 #define pl_stow(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		unsigned long __pl_r = pl_xadd((lock), PLOCK64_WL_1);                          \
-		pl_barrier();                                                                  \
 		while ((__pl_r & PLOCK64_RL_ANY) != PLOCK64_RL_1)                              \
 			__pl_r = pl_deref_long(lock);                                          \
+		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		unsigned int __pl_r = pl_xadd((lock), PLOCK32_WL_1);                           \
-		pl_barrier();                                                                  \
 		while ((__pl_r & PLOCK32_RL_ANY) != PLOCK32_RL_1)                              \
 			__pl_r = pl_deref_int(lock);                                           \
+		pl_barrier();                                                                  \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_stow__(char *,int);                    \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -180,8 +186,10 @@
 /* drop the W lock and go back to the S lock */
 #define pl_wtos(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK64_WL_1);                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_WL_1);                                                    \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_wtos__(char *,int);                    \
@@ -193,8 +201,10 @@
 /* drop the W lock and go back to the R lock */
 #define pl_wtor(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK64_WL_1 | PLOCK64_SL_1);                                     \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_WL_1 | PLOCK32_SL_1);                                     \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_wtor__(char *,int);                    \
@@ -271,8 +281,10 @@
 /* drop the write (W) lock entirely */
 #define pl_drop_w(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);                      \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);                      \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_w__(char *,int);                  \
@@ -377,8 +389,10 @@
 /* release atomic write access (A) lock */
 #define pl_drop_a(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK64_WL_1);                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_WL_1);                                                    \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_a__(char *,int);                  \
