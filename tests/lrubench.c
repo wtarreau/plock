@@ -55,6 +55,7 @@
 /* runtime arguments */
 unsigned int arg_cache_size = 100 * NBHEADS;
 unsigned int arg_key_space = 101 * NBHEADS; /* 1% miss = 99% hit rate */
+unsigned int arg_miss_cost = 100;
 unsigned int nbthreads = 2;
 int arg_nice = 0;
 int arg_mode = 0;
@@ -230,10 +231,11 @@ static inline uint32_t rnd32_range(uint32_t range)
 /* make the "expensive" work */
 static void produce_data(unsigned int k, char *str, int size)
 {
-	int i;
+	unsigned int i = 0;
 
-	for (i = 0; i < 100; i++)
+	do {
 		snprintf(str, size, "%u", k);
+	} while (i++ < arg_miss_cost);
 }
 
 /* consume the produced / retrieved data. Returns < 0 on error. */
@@ -703,7 +705,7 @@ void oneatwork(int thr)
 
 void usage(int ret)
 {
-	printf("usage: lrubench [-h] [-n nice] [-t threads] [-s size] [-k key_space] [-m mode]\n"
+	printf("usage: lrubench [-h] [-n nice] [-t threads] [-s size] [-k key_space] [-c miss_cost] [-m mode]\n"
 	       "Modes :\n"
 	       "  0 : no lock (only with -t 1)\n"
 	       "  1 : pthread spinlock lock for everything\n"
@@ -750,6 +752,11 @@ int main(int argc, char **argv)
 			if (--argc < 0)
 				usage(1);
 			arg_key_space = atol(*++argv);
+		}
+		else if (!strcmp(*argv, "-c")) {
+			if (--argc < 0)
+				usage(1);
+			arg_miss_cost = atol(*++argv);
 		}
 		else if (!strcmp(*argv, "-h"))
 			usage(0);
