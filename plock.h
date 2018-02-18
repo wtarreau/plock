@@ -270,7 +270,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 /* take the W lock under the S lock */
 #define pl_stow(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		unsigned long __pl_r = pl_xadd((lock), PLOCK64_WL_1);                          \
+		unsigned long __pl_r = pl_xadd_hle((lock), PLOCK64_WL_1);                          \
 		while ((__pl_r & PLOCK64_RL_ANY) != PLOCK64_RL_1)                              \
 			__pl_r = pl_deref_long(lock);                                          \
 		pl_barrier();                                                                  \
@@ -290,7 +290,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 #define pl_wtos(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_WL_1);                                                    \
+		pl_sub_hle(lock, PLOCK64_WL_1);                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_WL_1);                                                    \
@@ -305,7 +305,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 #define pl_wtor(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_WL_1 | PLOCK64_SL_1);                                     \
+		pl_sub_hle(lock, PLOCK64_WL_1 | PLOCK64_SL_1);                                     \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_WL_1 | PLOCK32_SL_1);                                     \
@@ -384,10 +384,10 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
 		register unsigned long __pl_r;                                                 \
 		while (1) {                                                                    \
-			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			__pl_r = pl_xadd_hle(__lk_r, __set_r);                                     \
 			if (!__builtin_expect(__pl_r & __msk_r, 0))                            \
 				break;                                                         \
-			pl_sub(__lk_r, __set_r);                                               \
+			pl_sub_hle(__lk_r, __set_r);                                               \
 			pl_wait_unlock_long(__lk_r, __msk_r);                                  \
 		}                                                                              \
 		/* wait for all other readers to leave */                                      \
@@ -423,7 +423,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 #define pl_drop_w(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);                      \
+		pl_sub_hle(lock, PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);                      \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
 		pl_sub(lock, PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);                      \

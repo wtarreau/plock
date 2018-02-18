@@ -254,6 +254,35 @@
 	}                                                                     \
 })
 
+#define pl_sub_hle(ptr, x) ({                                                     \
+	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
+		asm volatile("repe;lock subq %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned long)(x))                      \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 4) {                                     \
+		asm volatile("repe;lock subl %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned int)(x))                       \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 2) {                                     \
+		asm volatile("lock subw %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned short)(x))                     \
+			     : "cc");                                         \
+	} else if (sizeof(*(ptr)) == 1) {                                     \
+		asm volatile("lock subb %1, %0\n"                             \
+			     : "+m" (*(ptr))                                  \
+			     : "er" ((unsigned char)(x))                      \
+			     : "cc");                                         \
+	} else {                                                              \
+		void __unsupported_argument_size_for_pl_sub__(char *,int);    \
+		if (sizeof(*(ptr)) != 1 && sizeof(*(ptr)) != 2 &&                      \
+		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8)) \
+			__unsupported_argument_size_for_pl_sub__(__FILE__,__LINE__);   \
+	}                                                                     \
+})
+
 /* binary and integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
@@ -407,6 +436,44 @@
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned int ret = (unsigned int)(x);                         \
 		asm volatile("lock xaddl %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned short ret = (unsigned short)(x);                     \
+		asm volatile("lock xaddw %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
+		unsigned char ret = (unsigned char)(x);                       \
+		asm volatile("lock xaddb %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_xadd__(char *,int);   \
+		if (sizeof(*(ptr)) != 1 && sizeof(*(ptr)) != 2 &&                       \
+		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))  \
+			__unsupported_argument_size_for_pl_xadd__(__FILE__,__LINE__);   \
+		0;                                                            \
+	})                                                                    \
+)
+
+#define pl_xadd_hle(ptr, x) (                                                     \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned long ret = (unsigned long)(x);                       \
+		asm volatile("repne;lock xaddq %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned int ret = (unsigned int)(x);                         \
+		asm volatile("repne;lock xaddl %0, %1\n"                            \
 			     :  "=r" (ret), "+m" (*(ptr))                     \
 			     : "0" (ret)                                      \
 			     : "cc");                                         \
