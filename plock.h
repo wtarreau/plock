@@ -129,9 +129,9 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		while (1) {                                                                    \
 			if (__builtin_expect(pl_deref_long(__lk_r) & __msk_r, 0))              \
 				pl_wait_unlock_long(__lk_r, __msk_r);                          \
-			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+			if (!__builtin_expect(pl_xadd_hle(__lk_r, __set_r) & __msk_r, 0))          \
 				break;                                                         \
-			pl_sub(__lk_r, __set_r);                                               \
+			pl_sub_hle(__lk_r, __set_r);                                               \
 		}                                                                              \
 		pl_barrier();                                                                  \
 		0;                                                                             \
@@ -159,10 +159,10 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 #define pl_drop_r(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_RL_1);                                                    \
+		pl_sub_hle(lock, PLOCK64_RL_1);                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_RL_1);                                                    \
+		pl_sub_hle(lock, PLOCK32_RL_1);                                                    \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_r__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
