@@ -1,0 +1,221 @@
+2017-02-25 - making the R lock fully upgradable
+-----------------------------------------------
+
+Thanks to the way the atomic lock supports concurrent write accesses, there is
+a way to support upgrades from the R to the A lock. This comes with some
+constraints however, such as never to use the S nor W lock. In this case the
+upgrade to the A lock can be guaranteed. It thus becomes possible to ensure
+that the structure (e.g. a tree or a list) is not modified as long as the R
+lock is held, and that all pending changes are performed during the A lock,
+which is granted once all readers either have left or are converted to A.
+
+The state diagram looks like this :
+
+           ,-------> Unlocked <---.
+          /          /            |
+         /          /             |
+        |          V              |
+        |      Request R          |
+        |    W==0? |              |
+        |    R++   |              |
+        |          V              |
+        |       Grant R           |
+        |         /|              |
+        |    R-- / |              |
+         \______/  |R--;W++       |
+                   V              |
+               Request A          |
+                   |R==0?         |
+                   |              |
+                   V              |
+                Grant A           |
+                   | W--         /
+                   `------------'
+
+The problem with this mechanism is that it is not possible to go back to the R
+state before the last A has left, because one thread requesting the A lock and
+waiting for R==0 might not notice it immediately and if another thread goes
+from A to R, R will never be seen as zero. This has for consequences that
+conflicts will require a complete retry of the failed operation after going to
+the unlocked mode.
+
+Another point is that multiple threads might decide on doing the same operation
+(eg: delete a tree node), and the A lock doesn't permit to announce choices and
+let multiple threads settle on distinct but compatible choices. For example, in
+a typical indexed queue, multiple threads would want to pick the first item in
+the queue. All threads will end up selecting the first one, but if it is picked
+by the first thread (using a CAS operation), all other ones will fail and will
+have to perform a full retry, which is not efficient. The problem is similar to
+the thundering herd that multi-thread or multi-process network accept() know.
+In this case it doesn't matter what item is picked by what thread, as long as
+the N first nodes are dispatched on requesting threads. Thus it would be better
+if a selection phase happened during which each thread may claim the node it
+will be acting on. This cannot be performed under the atomic lock as there
+would be no way to prevent other threads from starting to modify the queue
+before deciding on which item to pick.
+
+Thus an intermediary step is required. This new lock state will be called 'C'
+(for 'Claim') as it will be used to let threads mark the items they decide to
+pick so that other threads can switch to the next possible one, or can even
+retract and decide to either cancel the operation, or to pause it and continue
+after the changes have been performed. This state will then transition to the
+atomic state so that all threads can proceed. In order for the end of this
+phase to be visible by all threads including the slowest ones, an extra flag
+will be required, which can be represented using the S bit.
+
+Here the way to set the S bit is not trivial, as it may only be set once all
+readers are either gone or converted to C. This will require that all waiters
+trying to upgrade from R to C watch the value and that the first one which
+notices the conditions are met sets the S bit. For more clarity, this new
+intermediary state waiting for all threads to join is called 'J'. It designates
+the willingness for a thread to participate to a concurrent write operation on
+the shared resource, while it is still possible to give up. Note that a give up
+during the Join phase is unlikely since it is only a synchronization phase once
+the decision to go to C has been taken. The J state is the only one permitting
+to reach the C state, so it might possibly be transparently implemented.
+
+It would be equally possible to set the S bit from the start, and it would make
+it compatible with attempts to take the A lock directly, as it would
+automatically make the A holder abort and retry, but it is more difficult to
+ensure that exactly one thread sets it, as the only reliable way to do this
+without overflowing S is to use a CAS operation during the upgrade, which by
+definition is deemed to fail often and to cause numerous retries.
+
+The approach consisting in letting the first thread noticing the end of the
+Join phase set the bit is thus easier to achieve, but incompatible with
+directly taking the A lock as it look exactly like an A lock waiting for
+readers to leave.
+
+Once the C lock is granted, all threads can start their marking operations to
+claim the items they want to work on, possibly using safer functions to walk
+through the structure avoiding modified parts (such as pointers carrying a
+special bit). Each thread which finishes its marking operations just has to
+decrement the R field to indicate its readiness. It may also decide to give up
+and go back to the unlocked state by decrementing both R and W. The thread
+which leaves R==0 (by definition the last one) just needs to clear the S bit,
+which effectively turns the lock into either an A lock or into the unlocked
+state if it was the only one present.
+
+           ,-------> Unlocked <---------.
+          /          /                  |
+         /          /                   |
+        |          V                    |
+        |      Request R                |
+        |    W==0? |                    |
+        |    R++   |                    |
+        |          V                    |
+        |       Grant R <---------.     |
+        |         /|      --W==0? |     |
+        ^    R-- / |              |     |
+        |\______/  |W++           |     |
+        |          V              |     |
+        |         (J)<----------. |     |
+        |          |S||R==W?     \|     |
+        |          |S|=1          |     |
+        |          V              |     |
+        |         (C)             |     |
+         \ R--,W--/|              |     |
+          \______/ |R--           |     |
+                   V              |     |
+               Request A          |     |
+                   |!R?S:=0       |     |
+                   |!S?           |     |
+                   V        R++  /      |
+                Grant A --------'       |
+                   |              W--  /
+                   `------------------'
+
+Thus the A state is really obtained from R in three atomic operations :
+  - join phase (R to J) :
+       W++;
+       while (!S && W!=R);
+
+  - claim phase (J to C) :
+       S|=1;
+
+  - atomic phase (C to A) :
+       S=0;
+
+There is no race condition here, because the S bit will remain until all R bits
+are gone, and R bits can only leave after S is set, when upgrading to A or when
+quitting. Thus all threads capable of setting S would have necessarily
+participated to its clearing by decrementing R if they would set it again after
+it had been cleared. For this reason an idempotent operation like an atomic OR
+is perfectly fine.
+
+Then while trying to transition from S to A, the wait condition is for S to go.
+In parallel, the first thread noticing R==0 has to clear S and to switch to A.
+
+Thus it is possible to describe the states like this :
+
+    - R : R > 0
+    - J : W > 0, S = 0, R == W
+    - C : W > 0, S > 0, R > 0
+    - A : W > 0
+
+It is clearly visible here that mixing S/W locks here would accidently make J
+transition to C.
+
+The new transitions are the following :
+
+   From  To  Action
+     U   R   wait for (W==0); R++;
+     R   U   R--
+     R   J   W++; wait for (S||W==R);
+     J   U   R--,W--;
+     J   C   if (!S) S|=1
+     C   U   R--,W--; if (!R) S=0
+     C   A   !S || (--R==0 && S&=~1)
+     A   U   W--
+     A   R   R++ && --W==0
+     A   J   R++
+
+It is not possible to go from R to A directly in this scheme : this would
+prevent the J state from going to C (since R will never equal W and S would
+never be released).
+
+It is normally not possible to go directly from U to J because the thread doing
+this couldn't know if other W bits are from other threads in J state or from an
+A state migrating to R, thus some modifications might already be in progress.
+However, it is possible to safely switch from U to J for a single thread when
+the lock is idle, guaranteeing an isolated change in this case. This is a
+solution to gain an exclusive access to the shared resource. Both a CAS and a
+reversable atomic add are fine. The method to safely switch from U to J is the
+following :
+
+     while (W);
+     W++,R++
+     while (R>1)
+       if (W>1) { R--,W--, goto 1}
+
+At this point the lock is held alone in J state. No R will be attempted (W>0),
+previous A locks cause a rollback, and subsequent A locks will wait for it to
+complete before starting. A compare and swap operation would allow to directly
+go from U to C, but the concurrency with R could make it fail forever.
+
+However if the resource allows certain operations to be done in parallel to A,
+it may be possible for such specific operations to go from U to J, but in this
+case it would very likely make more sense to go from U to A. A can go to J by
+incrementing R, since the presence in A implies all others are also in A or in
+J from A.
+
+If a thread in C state decides that it cannot complete its operation and has to
+take refuge somewhere or hide until the operation completes (e.g. a concurrent
+insertion and deletion making the code needlessly complex), it needs to
+transition to the A state regardless, do nothing there, then back to the R
+state to let other threads complete, then continue its work. It is guaranteed
+in this sequence that at least one R or W lock is always held on the tree
+during all that sequence, thus that no unadvertised operations may happen.
+Thanks to this rule, if a safe refuge allowed this thread to pause its lookup
+operation, it can then continue it as if it never left the R state and these
+operations never happened.
+
+It's worth noting that the S bit here serves as a "start" signal and allows to
+distinguish the lock acquisition phase from the release phase, since all other
+bits are in common.
+
+It seems likely that in practice applications will transparently jump to state
+C without an explicit pause at J. We will probably see "rtoc()", "take_c()",
+and "atoc()", all passing via the J phase first. Only certain applications may
+find a benefit in jumping to J and continuing to perform some operations in
+parallel while waiting for other threads to join.
