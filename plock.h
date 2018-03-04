@@ -690,3 +690,151 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		0;                                                                             \
 	})                                                                                     \
 )
+
+
+/*
+ * The following operations cover the multiple writers model : U->R->J->C->A
+ */
+
+
+/* Upgrade R to J. Inc(W) then wait for R==W or S != 0 */
+#define pl_rtoj(lock) (                                                                        \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __pl_r = pl_xadd(__lk_r, PLOCK64_WL_1) + PLOCK64_WL_1;  \
+		register unsigned char __m = 0;                                                \
+		while (!(__pl_r & PLOCK64_SL_ANY) &&                                           \
+		       (__pl_r / PLOCK64_WL_1 != (__pl_r & PLOCK64_RL_ANY) / PLOCK64_RL_1)) {  \
+			unsigned char __loops = __m + 1;                                       \
+			__m = (__m << 1) + 1;                                                  \
+			do {                                                                   \
+				pl_cpu_relax();                                                \
+				pl_cpu_relax();                                                \
+			} while (--__loops);                                                   \
+			__pl_r = pl_deref_long(__lk_r);                                        \
+		}                                                                              \
+		pl_barrier();                                                                  \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __pl_r = pl_xadd(__lk_r, PLOCK32_WL_1) + PLOCK32_WL_1;   \
+		register unsigned char __m = 0;                                                \
+		while (!(__pl_r & PLOCK32_SL_ANY) &&                                           \
+		       (__pl_r / PLOCK32_WL_1 != (__pl_r & PLOCK32_RL_ANY) / PLOCK32_RL_1)) {  \
+			unsigned char __loops = __m + 1;                                       \
+			__m = (__m << 1) + 1;                                                  \
+			do {                                                                   \
+				pl_cpu_relax();                                                \
+				pl_cpu_relax();                                                \
+			} while (--__loops);                                                   \
+			__pl_r = pl_deref_int(__lk_r);                                         \
+		}                                                                              \
+		pl_barrier();                                                                  \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_rtoj__(char *,int);                    \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_rtoj__(__FILE__,__LINE__);          \
+	})                                                                                     \
+)
+
+/* Upgrade J to C. Set S. Only one thread needs to do it though it's idempotent */
+#define pl_jtoc(lock) (                                                                        \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __pl_r = pl_deref_long(__lk_r);                         \
+		if (!(__pl_r & PLOCK64_SL_ANY))                                                \
+			pl_or(__lk_r, PLOCK64_SL_1);                                           \
+		pl_barrier();                                                                  \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __pl_r = pl_deref_int(__lk_r);                           \
+		if (!(__pl_r & PLOCK32_SL_ANY))                                                \
+			pl_or(__lk_r, PLOCK32_SL_1);                                           \
+		pl_barrier();                                                                  \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_jtoc__(char *,int);                    \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_jtoc__(__FILE__,__LINE__);          \
+	})                                                                                     \
+)
+
+/* Upgrade R to C. Inc(W) then wait for R==W or S != 0 */
+#define pl_rtoc(lock) (                                                                        \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __pl_r = pl_xadd(__lk_r, PLOCK64_WL_1) + PLOCK64_WL_1;  \
+		register unsigned char __m = 0;                                                \
+		while (__builtin_expect(!(__pl_r & PLOCK64_SL_ANY), 0)) {                      \
+			unsigned char __loops;                                                 \
+			if (__pl_r / PLOCK64_WL_1 == (__pl_r & PLOCK64_RL_ANY) / PLOCK64_RL_1) { \
+				pl_or(__lk_r, PLOCK64_SL_1);                                   \
+				break;                                                         \
+			}                                                                      \
+			__loops = __m + 1;                                                     \
+			__m = (__m << 1) + 1;                                                  \
+			do {                                                                   \
+				pl_cpu_relax();                                                \
+				pl_cpu_relax();                                                \
+			} while (--__loops);                                                   \
+			__pl_r = pl_deref_long(__lk_r);                                        \
+		}                                                                              \
+		pl_barrier();                                                                  \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __pl_r = pl_xadd(__lk_r, PLOCK32_WL_1) + PLOCK32_WL_1;   \
+		register unsigned char __m = 0;                                                \
+		while (__builtin_expect(!(__pl_r & PLOCK32_SL_ANY), 0)) {                      \
+			unsigned char __loops;                                                 \
+			if (__pl_r / PLOCK32_WL_1 == (__pl_r & PLOCK32_RL_ANY) / PLOCK32_RL_1) { \
+				pl_or(__lk_r, PLOCK32_SL_1);                                   \
+				break;                                                         \
+			}                                                                      \
+			__loops = __m + 1;                                                     \
+			__m = (__m << 1) + 1;                                                  \
+			do {                                                                   \
+				pl_cpu_relax();                                                \
+				pl_cpu_relax();                                                \
+			} while (--__loops);                                                   \
+			__pl_r = pl_deref_int(__lk_r);                                         \
+		}                                                                              \
+		pl_barrier();                                                                  \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_rtoj__(char *,int);                    \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_rtoj__(__FILE__,__LINE__);          \
+	})                                                                                     \
+)
+
+/* Upgrade C to A. R-- then wait for !S or clear S if !R */
+#define pl_ctoa(lock) (                                                                        \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __pl_r = pl_xadd(__lk_r, -PLOCK64_RL_1) - PLOCK64_RL_1; \
+		while (__pl_r & PLOCK64_SL_ANY) {                                              \
+			if (!(__pl_r & PLOCK64_RL_ANY)) {                                      \
+				pl_and(__lk_r, ~PLOCK64_SL_1);                                 \
+				break;                                                         \
+			}                                                                      \
+			pl_cpu_relax();                                                        \
+			pl_cpu_relax();                                                        \
+			__pl_r = pl_deref_long(__lk_r);                                        \
+		}                                                                              \
+		pl_barrier();                                                                  \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __pl_r = pl_xadd(__lk_r, -PLOCK32_RL_1) - PLOCK32_RL_1;  \
+		while (__pl_r & PLOCK32_SL_ANY) {                                              \
+			if (!(__pl_r & PLOCK32_RL_ANY)) {                                      \
+				pl_and(__lk_r, ~PLOCK32_SL_1);                                 \
+				break;                                                         \
+			}                                                                      \
+			pl_cpu_relax();                                                        \
+			pl_cpu_relax();                                                        \
+			__pl_r = pl_deref_int(__lk_r);                                         \
+		}                                                                              \
+		pl_barrier();                                                                  \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_ctoa__(char *,int);                    \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_ctoa__(__FILE__,__LINE__);          \
+	})                                                                                     \
+)
