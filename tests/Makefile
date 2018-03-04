@@ -1,4 +1,4 @@
-OBJS   =  concurrent latency sharing testlock treelock lrubench testmw
+OBJS   =  concurrent latency sharing testlock treelock lrubench testmw testsw
 LD     =  $(CC)
 CFLAGS = -O3 -fomit-frame-pointer -Wall -W -Wextra
 
