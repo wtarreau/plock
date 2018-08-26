@@ -640,6 +640,35 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
+/* Downgrade A to R. Inc(R), dec(W) then wait for W==0 */
+#define pl_ator(lock) (                                                                        \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __set_r = PLOCK64_RL_1 - PLOCK64_WL_1;                  \
+		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
+		register unsigned long __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;            \
+		while (__builtin_expect(__pl_r & __msk_r, 0)) {                                \
+			pl_wait_unlock_long(__lk_r, __msk_r);                                  \
+			__pl_r = pl_deref_long(__lk_r);                                        \
+		}                                                                              \
+		pl_barrier();                                                                  \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __set_r = PLOCK32_RL_1 - PLOCK32_WL_1;                   \
+		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
+		register unsigned int __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;             \
+		while (__builtin_expect(__pl_r & __msk_r, 0)) {                                \
+			pl_wait_unlock_int(__lk_r, __msk_r);                                   \
+			__pl_r = pl_deref_int(__lk_r);                                         \
+		}                                                                              \
+		pl_barrier();                                                                  \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_ator__(char *,int);                    \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_ator__(__FILE__,__LINE__);          \
+	})                                                                                     \
+)
+
 /* Try to upgrade from R to A, return non-zero on success, otherwise 0.
  * This lock will fail if S is held or appears while waiting (typically due to
  * a previous grab that was disguised as a W due to an overflow). In case of
