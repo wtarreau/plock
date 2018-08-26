@@ -910,6 +910,23 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
+/* Returns non-zero if the thread calling it is the last writer, otherwise zero. It is
+ * designed to be called before pl_drop_j(), pl_drop_c() or pl_drop_a() for operations
+ * which need to be called only once.
+ */
+#define pl_last_writer(lock) (                                                                 \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		!(pl_deref_long(lock) & PLOCK64_WL_2PL);                                       \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		!(pl_deref_int(lock) & PLOCK32_WL_2PL);                                        \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_last_j__(char *,int);                  \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_last_j__(__FILE__,__LINE__);        \
+		0;                                                                             \
+	})                                                                                     \
+)
+
 /* attempt to get an exclusive write access via the J lock and wait for it.
  * Only one thread may succeed in this operation. It will not conflict with
  * other users and will first wait for all writers to leave, then for all
