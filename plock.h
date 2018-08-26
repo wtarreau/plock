@@ -910,6 +910,80 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
+/* attempt to get an exclusive write access via the J lock and wait for it.
+ * Only one thread may succeed in this operation. It will not conflict with
+ * other users and will first wait for all writers to leave, then for all
+ * readers to leave before starting. This offers a solution to obtain an
+ * exclusive access to a shared resource in the R/J/C/A model. A concurrent
+ * take_a() will wait for this one to finish first. Using a CAS instead of XADD
+ * should make the operation converge slightly faster. Returns non-zero on
+ * success otherwise 0.
+ */
+#define pl_try_j(lock) (                                                                      \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __set_r = PLOCK64_WL_1 | PLOCK64_RL_1;                  \
+		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
+		register unsigned long __pl_r;                                                 \
+		register unsigned char __m;                                                    \
+		pl_wait_unlock_long(__lk_r, __msk_r);                                          \
+		__pl_r = pl_xadd(__lk_r, __set_r) + __set_r;                                   \
+		/* wait for all other readers to leave */                                      \
+		__m = 0;                                                                       \
+		while (__builtin_expect(__pl_r & PLOCK64_RL_2PL, 0)) {                         \
+			unsigned char __loops;                                                 \
+			/* give up on other writers */                                         \
+			if (__builtin_expect(__pl_r & PLOCK64_WL_2PL, 0)) {                    \
+				pl_sub(__lk_r, __set_r);                                       \
+				__pl_r = 0; /* failed to get the lock */                       \
+				break;                                                         \
+			}                                                                      \
+			__loops = __m + 1;                                                     \
+			__m = (__m << 1) + 1;                                                  \
+			do {                                                                   \
+				pl_cpu_relax();                                                \
+				pl_cpu_relax();                                                \
+			} while (--__loops);                                                   \
+			__pl_r = pl_deref_long(__lk_r);                                        \
+		}                                                                              \
+		pl_barrier();                                                                  \
+		__pl_r; /* return value, cannot be null on success */                          \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __set_r = PLOCK32_WL_1 | PLOCK32_RL_1;                   \
+		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
+		register unsigned int __pl_r;                                                  \
+		register unsigned char __m;                                                    \
+		pl_wait_unlock_int(__lk_r, __msk_r);                                           \
+		__pl_r = pl_xadd(__lk_r, __set_r) + __set_r;                                   \
+		/* wait for all other readers to leave */                                      \
+		__m = 0;                                                                       \
+		while (__builtin_expect(__pl_r & PLOCK32_RL_2PL, 0)) {                         \
+			unsigned char __loops;                                                 \
+			/* but rollback on other writers */                                    \
+			if (__builtin_expect(__pl_r & PLOCK32_WL_2PL, 0)) {                    \
+				pl_sub(__lk_r, __set_r);                                       \
+				__pl_r = 0; /* failed to get the lock */                       \
+				break;                                                         \
+			}                                                                      \
+			__loops = __m + 1;                                                     \
+			__m = (__m << 1) + 1;                                                  \
+			do {                                                                   \
+				pl_cpu_relax();                                                \
+				pl_cpu_relax();                                                \
+			} while (--__loops);                                                   \
+			__pl_r = pl_deref_int(__lk_r);                                         \
+		}                                                                              \
+		pl_barrier();                                                                  \
+		__pl_r; /* return value, cannot be null on success */                          \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_try_j__(char *,int);                   \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_try_j__(__FILE__,__LINE__);         \
+		0;                                                                             \
+	})                                                                                     \
+)
+
 /* request an exclusive write access via the J lock and wait for it. Only one
  * thread may succeed in this operation. It will not conflict with other users
  * and will first wait for all writers to leave, then for all readers to leave
