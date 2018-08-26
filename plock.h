@@ -837,6 +837,29 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
+/* Drop the claim (C) lock : R--,W-- then clear S if !R */
+#define pl_drop_c(lock) (                                                                      \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long __set_r = - PLOCK64_RL_1 - PLOCK64_WL_1;                \
+		register unsigned long __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;            \
+		if (!(__pl_r & PLOCK64_RL_ANY))                                                \
+			pl_and(__lk_r, ~PLOCK64_SL_1);                                         \
+		pl_barrier();                                                                  \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int __set_r = - PLOCK32_RL_1 - PLOCK32_WL_1;                 \
+		register unsigned int __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;             \
+		if (!(__pl_r & PLOCK32_RL_ANY))                                                \
+			pl_and(__lk_r, ~PLOCK32_SL_1);                                         \
+		pl_barrier();                                                                  \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_drop_c__(char *,int);                  \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_drop_c__(__FILE__,__LINE__);        \
+	})                                                                                     \
+)
+
 /* Upgrade C to A. R-- then wait for !S or clear S if !R */
 #define pl_ctoa(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
