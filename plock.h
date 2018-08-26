@@ -872,6 +872,21 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	})                                                                                     \
 )
 
+/* downgrade the atomic write access lock (A) to join (J) */
+#define pl_atoj(lock) (                                                                        \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		pl_barrier();                                                                  \
+		pl_add(lock, PLOCK64_RL_1);                                                    \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		pl_barrier();                                                                  \
+		pl_add(lock, PLOCK32_RL_1);                                                    \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_atoj__(char *,int);                    \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_atoj__(__FILE__,__LINE__);          \
+	})                                                                                     \
+)
+
 /* request an exclusive write access via the J lock and wait for it. Only one
  * thread may succeed in this operation. It will not conflict with other users
  * and will first wait for all writers to leave, then for all readers to leave
