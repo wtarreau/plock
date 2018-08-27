@@ -46,10 +46,10 @@
 #define PLOCK32_WL_ANY 0xFFFC0000
 
 /* dereferences <*p> as unsigned long without causing aliasing issues */
-#define pl_deref_long(p) ({ volatile unsigned long *__pl_l = (void *)(p); *__pl_l; })
+#define pl_deref_long(p) ({ volatile unsigned long *__pl_l = (unsigned long *)(p); *__pl_l; })
 
 /* dereferences <*p> as unsigned int without causing aliasing issues */
-#define pl_deref_int(p) ({ volatile unsigned int *__pl_i = (void *)(p); *__pl_i; })
+#define pl_deref_int(p) ({ volatile unsigned int *__pl_i = (unsigned int *)(p); *__pl_i; })
 
 /* This function waits for <lock> to release all bits covered by <mask>, and
  * enforces an exponential backoff using CPU pauses to limit the pollution to
@@ -127,7 +127,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
  */
 #define pl_take_r(lock)                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_RL_1;                                 \
 		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
 		while (1) {                                                                    \
@@ -140,7 +140,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		pl_barrier();                                                                  \
 		0;                                                                             \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_RL_1;                                  \
 		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
 		while (1) {                                                                    \
@@ -211,7 +211,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
  */
 #define pl_take_s(lock)                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_SL_1 | PLOCK64_RL_1;                  \
 		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
 		while (1) {                                                                    \
@@ -223,7 +223,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		pl_barrier();                                                                  \
 		0;                                                                             \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_SL_1 | PLOCK32_RL_1;                   \
 		register unsigned int __msk_r = PLOCK32_WL_ANY | PLOCK32_SL_ANY;               \
 		while (1) {                                                                    \
@@ -383,7 +383,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
  */
 #define pl_take_w(lock)                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1;   \
 		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
 		register unsigned long __pl_r;                                                 \
@@ -400,7 +400,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		pl_barrier();                                                                  \
 		0;                                                                             \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1;    \
 		register unsigned int __msk_r = PLOCK32_WL_ANY | PLOCK32_SL_ANY;               \
 		register unsigned int __pl_r;                                                  \
@@ -481,7 +481,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
  */
 #define pl_try_rtow(lock) (                                                                    \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_WL_1 | PLOCK64_SL_1;                  \
 		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
 		register unsigned long __pl_r;                                                 \
@@ -501,7 +501,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		}                                                                              \
 		!__pl_r; /* return value */                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_WL_1 | PLOCK32_SL_1;                   \
 		register unsigned int __msk_r = PLOCK32_WL_ANY | PLOCK32_SL_ANY;               \
 		register unsigned int __pl_r;                                                  \
@@ -585,7 +585,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
  */
 #define pl_take_a(lock)                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_WL_1;                                 \
 		register unsigned long __msk_r = PLOCK64_SL_ANY;                               \
 		register unsigned long __pl_r;                                                 \
@@ -604,7 +604,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		pl_barrier();                                                                  \
 		0;                                                                             \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_WL_1;                                  \
 		register unsigned int __msk_r = PLOCK32_SL_ANY;                                \
 		register unsigned int __pl_r;                                                  \
@@ -647,7 +647,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 /* Downgrade A to R. Inc(R), dec(W) then wait for W==0 */
 #define pl_ator(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_RL_1 - PLOCK64_WL_1;                  \
 		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
 		register unsigned long __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;            \
@@ -657,7 +657,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		}                                                                              \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_RL_1 - PLOCK32_WL_1;                   \
 		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
 		register unsigned int __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;             \
@@ -733,7 +733,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 /* Upgrade R to J. Inc(W) then wait for R==W or S != 0 */
 #define pl_rtoj(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __pl_r = pl_xadd(__lk_r, PLOCK64_WL_1) + PLOCK64_WL_1;  \
 		register unsigned char __m = 0;                                                \
 		while (!(__pl_r & PLOCK64_SL_ANY) &&                                           \
@@ -748,7 +748,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		}                                                                              \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __pl_r = pl_xadd(__lk_r, PLOCK32_WL_1) + PLOCK32_WL_1;   \
 		register unsigned char __m = 0;                                                \
 		while (!(__pl_r & PLOCK32_SL_ANY) &&                                           \
@@ -772,13 +772,13 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 /* Upgrade J to C. Set S. Only one thread needs to do it though it's idempotent */
 #define pl_jtoc(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __pl_r = pl_deref_long(__lk_r);                         \
 		if (!(__pl_r & PLOCK64_SL_ANY))                                                \
 			pl_or(__lk_r, PLOCK64_SL_1);                                           \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __pl_r = pl_deref_int(__lk_r);                           \
 		if (!(__pl_r & PLOCK32_SL_ANY))                                                \
 			pl_or(__lk_r, PLOCK32_SL_1);                                           \
@@ -793,7 +793,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 /* Upgrade R to C. Inc(W) then wait for R==W or S != 0 */
 #define pl_rtoc(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __pl_r = pl_xadd(__lk_r, PLOCK64_WL_1) + PLOCK64_WL_1;  \
 		register unsigned char __m = 0;                                                \
 		while (__builtin_expect(!(__pl_r & PLOCK64_SL_ANY), 0)) {                      \
@@ -812,7 +812,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		}                                                                              \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __pl_r = pl_xadd(__lk_r, PLOCK32_WL_1) + PLOCK32_WL_1;   \
 		register unsigned char __m = 0;                                                \
 		while (__builtin_expect(!(__pl_r & PLOCK32_SL_ANY), 0)) {                      \
@@ -840,14 +840,14 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 /* Drop the claim (C) lock : R--,W-- then clear S if !R */
 #define pl_drop_c(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = - PLOCK64_RL_1 - PLOCK64_WL_1;                \
 		register unsigned long __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;            \
 		if (!(__pl_r & PLOCK64_RL_ANY))                                                \
 			pl_and(__lk_r, ~PLOCK64_SL_1);                                         \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = - PLOCK32_RL_1 - PLOCK32_WL_1;                 \
 		register unsigned int __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;             \
 		if (!(__pl_r & PLOCK32_RL_ANY))                                                \
@@ -863,7 +863,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 /* Upgrade C to A. R-- then wait for !S or clear S if !R */
 #define pl_ctoa(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __pl_r = pl_xadd(__lk_r, -PLOCK64_RL_1) - PLOCK64_RL_1; \
 		while (__pl_r & PLOCK64_SL_ANY) {                                              \
 			if (!(__pl_r & PLOCK64_RL_ANY)) {                                      \
@@ -876,7 +876,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		}                                                                              \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __pl_r = pl_xadd(__lk_r, -PLOCK32_RL_1) - PLOCK32_RL_1;  \
 		while (__pl_r & PLOCK32_SL_ANY) {                                              \
 			if (!(__pl_r & PLOCK32_RL_ANY)) {                                      \
@@ -936,9 +936,9 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
  * should make the operation converge slightly faster. Returns non-zero on
  * success otherwise 0.
  */
-#define pl_try_j(lock) (                                                                      \
+#define pl_try_j(lock) (                                                                       \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_WL_1 | PLOCK64_RL_1;                  \
 		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
 		register unsigned long __pl_r;                                                 \
@@ -966,7 +966,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		pl_barrier();                                                                  \
 		__pl_r; /* return value, cannot be null on success */                          \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_WL_1 | PLOCK32_RL_1;                   \
 		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
 		register unsigned int __pl_r;                                                  \
@@ -1012,7 +1012,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 #define pl_take_j(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		__label__ __retry;                                                             \
-		register unsigned long *__lk_r = (void *)(lock);                               \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_WL_1 | PLOCK64_RL_1;                  \
 		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
 		register unsigned long __pl_r;                                                 \
@@ -1041,7 +1041,7 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 		0;                                                                             \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		__label__ __retry;                                                             \
-		register unsigned int *__lk_r = (void *)(lock);                                \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_WL_1 | PLOCK32_RL_1;                   \
 		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
 		register unsigned int __pl_r;                                                  \
