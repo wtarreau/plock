@@ -93,6 +93,58 @@ static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask
 	} while (__builtin_expect(pl_deref_int(lock) & mask, 0));
 }
 
+/* This function waits for <lock> to change from value <prev> and returns the
+ * new value. It enforces an exponential backoff using CPU pauses to limit the
+ * pollution to the other threads' caches. The progression follows (2^N)-1,
+ * limited to 255 iterations, which is way sufficient even for very large
+ * numbers of threads. It is designed to be called after a first test which
+ * retrieves the previous value, so it starts by waiting. The function slightly
+ * benefits from size optimization under gcc, but Clang cannot do it, so it's
+ * not done here, as it doesn't make a big difference.
+ */
+__attribute__((unused,noinline,no_instrument_function))
+static unsigned long pl_wait_new_long(const unsigned long *lock, const unsigned long prev)
+{
+	unsigned char m = 0;
+	unsigned long curr;
+
+	do {
+		unsigned char loops = m + 1;
+		m = (m << 1) + 1;
+		do {
+			pl_cpu_relax();
+		} while (__builtin_expect(--loops, 0));
+		curr = pl_deref_long(lock);
+	} while (__builtin_expect(curr == prev, 0));
+	return curr;
+}
+
+/* This function waits for <lock> to change from value <prev> and returns the
+ * new value. It enforces an exponential backoff using CPU pauses to limit the
+ * pollution to the other threads' caches. The progression follows (2^N)-1,
+ * limited to 255 iterations, which is way sufficient even for very large
+ * numbers of threads. It is designed to be called after a first test which
+ * retrieves the previous value, so it starts by waiting. The function slightly
+ * benefits from size optimization under gcc, but Clang cannot do it, so it's
+ * not done here, as it doesn't make a big difference.
+ */
+__attribute__((unused,noinline,no_instrument_function))
+static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int prev)
+{
+	unsigned char m = 0;
+	unsigned int curr;
+
+	do {
+		unsigned char loops = m + 1;
+		m = (m << 1) + 1;
+		do {
+			pl_cpu_relax();
+		} while (__builtin_expect(--loops, 0));
+		curr = pl_deref_int(lock);
+	} while (__builtin_expect(curr == prev, 0));
+	return curr;
+}
+
 /* request shared read access (R), return non-zero on success, otherwise 0 */
 #define pl_try_r(lock) (                                                                       \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
