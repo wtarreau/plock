@@ -1,0 +1,68 @@
+2019-02-11 - new model
+======================
+
+The previous model caused some confusion for certain state transitions when the
+new C and J states were added. This new version aims at redefining the various
+states encoding in order to address all this.
+
+
+Observations
+------------
+
+The previous model only involved presence counters, but it was not based on the
+notion of constraint, which is what made it difficult to satisfy all combined
+use cases.
+
+Certain states require exclusivity, which means 0 extra participant. Thus we
+need a counter of participants. Some other states require that no other
+participant modifies the structure. The constraint must be placed on this
+criterion so we need a counter of "unprotected" users to know when it's safe
+to start to operate.
+
+We don't necessarily always require many bits for unique positions, a single
+bit may be enough using a test-and-set operation. Test-and-set presents the
+nice benefit of not causing overflows, not requiring a rollback in case of
+failure, and not being sensitive to changes like cmpxcfg. Test-and-set may also
+be performed on bits which are parts of counters, so that some of them may be
+cancelled by grouped operations using sub/add/xadd.
+
+It makes sense to use more bits to describe plain readers than what it requires
+to describe atomic writers, because the readers come with extra constraints.
+
+
+Analogy and terminology
+-----------------------
+
+Some analogy may be drawn with a museum. In a museum, many visitors may enter
+at the same time to watch art pieces. These art pieces do occasionally require
+some work to be maintained in good state, but these operations must never ever
+be done as long as there are visitors present. It is possible to decide that
+some operations will have to be performed and that the museum's entrance closes
+and that the workers will wait for the last visitor to quit before starting to
+proceed. It's even possible that the workers will come late in the day along
+with visitors, to start to watch what needs to be worked on during the visits,
+and then decide what to work on once regular visitors quit. At this point they
+will have to divide their work. It's not acceptable that multiple workers work
+on the same piece so they will claim the piece they expect to work on. It's
+possible that some workers will be left with nothing to do and will then quit.
+
+In this model we see that it is possible to have a number of parallel visitors
+progressively turn into a number of parallel workers provided they respect a
+certain sequence to decide who does what. For security reasons the entrance
+must be closed during all operations, thus until the last worker finishes. This
+also means that workers can be more prudent because they know they're moving in
+a works area and that every step but be careful. This matches the multi-reader
+to multi-writer model which requires two intermediary steps do decide then
+divide the work.
+
+There is also a fire extinguisher, a single one. Any visitor may use it if
+needed. The procedure is simple, the fire extinguisher is picked from the wall
+then used on the flames. A regular fireman could periodically pick the
+extinguisher with him during inspection walks. This doesn't prevent visitors
+from coming in. However if a fire is detected, nobody may enter anymore and
+the fireman needs to wait for people to quit before watering everything. In
+case of fire, if the extinguisher is not on the wall anymore, all visitors
+must quit. If it's on the wall, one visitor may pick it and use it while the
+others may only quit. This model matches the multi-reader to single writer
+model passing via an upgrade state represented by the fire extinguisher.
+
