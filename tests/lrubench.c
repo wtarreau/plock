@@ -707,6 +707,97 @@ void loop_mode9(void)
 	}
 }
 
+/* read,delete+insert: LORW W */
+void loop_mode10(void)
+{
+	unsigned int k;
+	struct cache_item *c, *tmp;
+	char str[STRSZ];
+
+	while (step == 2) {
+		k = rnd32_range(arg_key_space);
+
+		/* lookup */
+		pl_lorw_wrlock(&cache_lock.plock);
+		if ((c = cache_lookup(k))) {
+			/* entry found, let's use it */
+			memcpy(str, c->str, sizeof(str));
+			pl_lorw_wrunlock(&cache_lock.plock);
+			goto done;
+		}
+		pl_lorw_wrunlock(&cache_lock.plock);
+
+		/* miss: produce the expensive data locally */
+		thread_misses++;
+		produce_data(k, str, sizeof(str));
+
+		/* now try to store the new data. It's possible that the
+		 * same key was inserted in the mean time. If so we have
+		 * to remove it.
+		 */
+		if ((c = cache_alloc())) {
+			c->key = k;
+			memcpy(c->str, str, sizeof(str));
+			pl_lorw_wrlock(&cache_lock.plock);
+			if ((tmp = cache_lookup(k)))
+				cache_delete(tmp);
+			cache_insert(c);
+			cache_trim();
+			pl_lorw_wrunlock(&cache_lock.plock);
+		}
+	done:
+		if (consume_data(k, str) < 0)
+			exit(1);
+		thread_total_work++;
+	}
+}
+
+
+/* read: LORW R, delete+insert: LORW W */
+void loop_mode11(void)
+{
+	unsigned int k;
+	struct cache_item *c, *tmp;
+	char str[STRSZ];
+
+	while (step == 2) {
+		k = rnd32_range(arg_key_space);
+
+		/* lookup */
+		pl_lorw_rdlock(&cache_lock.plock);
+		if ((c = cache_lookup(k))) {
+			/* entry found, let's use it */
+			memcpy(str, c->str, sizeof(str));
+			pl_lorw_rdunlock(&cache_lock.plock);
+			goto done;
+		}
+		pl_lorw_rdunlock(&cache_lock.plock);
+
+		/* miss: produce the expensive data locally */
+		thread_misses++;
+		produce_data(k, str, sizeof(str));
+
+		/* now try to store the new data. It's possible that the
+		 * same key was inserted in the mean time. If so we have
+		 * to remove it.
+		 */
+		if ((c = cache_alloc())) {
+			c->key = k;
+			memcpy(c->str, str, sizeof(str));
+			pl_lorw_wrlock(&cache_lock.plock);
+			if ((tmp = cache_lookup(k)))
+				cache_delete(tmp);
+			cache_insert(c);
+			cache_trim();
+			pl_lorw_wrunlock(&cache_lock.plock);
+		}
+	done:
+		if (consume_data(k, str) < 0)
+			exit(1);
+		thread_total_work++;
+	}
+}
+
 /* main thread preparation */
 void oneatwork(int thr)
 {
@@ -735,6 +826,8 @@ void oneatwork(int thr)
 	case 7: loop_mode7(); break;
 	case 8: loop_mode8(); break;
 	case 9: loop_mode9(); break;
+	case 10: loop_mode10(); break;
+	case 11: loop_mode11(); break;
 	}
 
 	/* only time the first finishing thread */
@@ -763,6 +856,8 @@ void usage(int ret)
 	       "  7 : plock R lock for lookup, R->S->W for insertion\n"
 	       "  8 : plock R lock for lookup, R->W for insertion\n"
 	       "  9 : plock R lock for lookup, J for insertion\n"
+	       " 10 : lorw W lock for lookup & insertion\n"
+	       " 11 : lorw R lock for lookup, W for insertion\n"
 	       "\n");
 	exit(ret);
 }

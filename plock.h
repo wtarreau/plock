@@ -1178,3 +1178,163 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__unsupported_argument_size_for_pl_drop_j__(__FILE__,__LINE__);        \
 	})                                                                                     \
 )
+
+/*
+ * The part below is for Low Overhead R/W locks (LORW). These ones are not
+ * upgradable and not necessarily fair but they try to be fast when uncontended
+ * and to limit the cost and perturbation during contention. Writers always
+ * have precedence over readers to preserve latency as much as possible.
+ *
+ * The principle is to offer a fast no-contention path and a limited total
+ * number of writes for the contended path. Since R/W locks are expected to be
+ * used in situations where there is a benefit in separating reads from writes,
+ * it is expected that reads are common (typ >= 50%) and that there is often at
+ * least one reader (otherwise a spinlock wouldn't be a problem). As such, a
+ * reader will try to pass instantly, detect contention and immediately retract
+ * and wait in the queue in case there is contention. A writer will first also
+ * try to pass instantly, and if it fails due to pending readers, it will mark
+ * that it's waiting so that readers stop entering. This will leave the writer
+ * waiting as close as possible to the point of being granted access. New
+ * writers will also notice this previous contention and will wait outside.
+ * This means that a successful access for a reader or a writer requires a
+ * single CAS, and a contended attempt will require one failed CAS and one
+ * successful XADD for a reader, or an optional OR and a N+1 CAS for the
+ * writer.
+ *
+ * A counter of shared users indicates the number of active readers, while a
+ * (single-bit) counter of exclusive writers indicates whether the lock is
+ * currently held for writes. This distinction also permits to use a single
+ * function to release the lock if desired, since the exclusive bit indicates
+ * the state of the caller of unlock(). The WRQ bit is cleared during the
+ * unlock.
+ *
+ * Layout: (32/64 bit):
+ *                      31           2   1     0
+ *         +-----------+--------------+-----+-----+
+ *         |           |     SHR      | WRQ | EXC |
+ *         +-----------+--------------+-----+-----+
+ *
+ * In order to minimize operations, the WRQ bit is held during EXC so that the
+ * write waiter that had to fight for EXC doesn't have to release WRQ during
+ * its operations, and will just drop it along with EXC upon unlock.
+ *
+ * This means the following costs:
+ *   reader:
+ *      success: 1 CAS
+ *      failure: 1 CAS + 1 XADD
+ *      unlock:  1 SUB
+ *   writer:
+ *      success: 1 RD + 1 CAS
+ *      failure: 1 RD + 1 CAS + 0/1 OR + N CAS
+ *      unlock:  1 AND
+ */
+
+#define PLOCK_LORW_EXC_BIT    ((sizeof(long) == 8) ?  0 :  0)
+#define PLOCK_LORW_EXC_SIZE   ((sizeof(long) == 8) ?  1 :  1)
+#define PLOCK_LORW_EXC_BASE   (1UL << PLOCK_LORW_EXC_BIT)
+#define PLOCK_LORW_EXC_MASK   (((1UL << PLOCK_LORW_EXC_SIZE) - 1UL) << PLOCK_LORW_EXC_BIT)
+
+#define PLOCK_LORW_WRQ_BIT    ((sizeof(long) == 8) ?  1 :  1)
+#define PLOCK_LORW_WRQ_SIZE   ((sizeof(long) == 8) ?  1 :  1)
+#define PLOCK_LORW_WRQ_BASE   (1UL << PLOCK_LORW_WRQ_BIT)
+#define PLOCK_LORW_WRQ_MASK   (((1UL << PLOCK_LORW_WRQ_SIZE) - 1UL) << PLOCK_LORW_WRQ_BIT)
+
+#define PLOCK_LORW_SHR_BIT    ((sizeof(long) == 8) ?  2 :  2)
+#define PLOCK_LORW_SHR_SIZE   ((sizeof(long) == 8) ? 30 : 30)
+#define PLOCK_LORW_SHR_BASE   (1UL << PLOCK_LORW_SHR_BIT)
+#define PLOCK_LORW_SHR_MASK   (((1UL << PLOCK_LORW_SHR_SIZE) - 1UL) << PLOCK_LORW_SHR_BIT)
+
+__attribute__((unused,always_inline,no_instrument_function))
+static inline void pl_lorw_rdlock(unsigned long *lock)
+{
+	unsigned long lk = 0;
+
+	/* First, assume we're alone and try to get the read lock (fast path).
+	 * It often works because read locks are often used on low-contention
+	 * structs.
+	 */
+	lk = pl_cmpxchg(lock, 0, PLOCK_LORW_SHR_BASE);
+	if (!lk)
+		return;
+
+	/* so we were not alone, make sure there's no writer waiting for the
+	 * lock to be empty of visitors.
+	 */
+	if (lk & PLOCK_LORW_WRQ_MASK)
+		lk = pl_wait_unlock_long(lock, PLOCK_LORW_WRQ_MASK);
+
+	/* count us as visitor among others */
+	lk = pl_xadd(lock, PLOCK_LORW_SHR_BASE);
+
+	/* wait for end of exclusive access if any */
+	if (lk & PLOCK_LORW_EXC_MASK)
+		lk = pl_wait_unlock_long(lock, PLOCK_LORW_EXC_MASK);
+}
+
+
+__attribute__((unused,always_inline,no_instrument_function))
+static inline void pl_lorw_wrlock(unsigned long *lock)
+{
+	unsigned long lk = 0;
+	unsigned long old = 0;
+
+	/* first, make sure another writer is not already blocked waiting for
+	 * readers to leave. Note that tests have shown that it can be even
+	 * faster to avoid the first check and to unconditionally wait.
+	 */
+	lk = pl_deref_long(lock);
+	if (__builtin_expect(lk & PLOCK_LORW_WRQ_MASK, 1))
+		lk = pl_wait_unlock_long(lock, PLOCK_LORW_WRQ_MASK);
+
+	do {
+		/* let's check for the two sources of contention at once */
+
+		if (__builtin_expect(lk & (PLOCK_LORW_SHR_MASK | PLOCK_LORW_EXC_MASK), 1)) {
+			/* check if there are still readers coming. If so, close the door and
+			 * wait for them to leave.
+			 */
+			if (lk & PLOCK_LORW_SHR_MASK) {
+				/* note below, an OR is significantly cheaper than BTS or XADD */
+				if (!(lk & PLOCK_LORW_WRQ_MASK))
+					pl_or(lock, PLOCK_LORW_WRQ_BASE);
+				lk = pl_wait_unlock_long(lock, PLOCK_LORW_SHR_MASK);
+			}
+
+			/* And also wait for a previous writer to finish. */
+			if (lk & PLOCK_LORW_EXC_MASK)
+				lk = pl_wait_unlock_long(lock, PLOCK_LORW_EXC_MASK);
+		}
+
+		/* A fresh new reader may appear right now if there were none
+		 * above and we didn't close the door.
+		 */
+		old = lk & ~PLOCK_LORW_SHR_MASK & ~PLOCK_LORW_EXC_MASK;
+		lk = pl_cmpxchg(lock, old, old | PLOCK_LORW_EXC_BASE);
+	} while (lk != old);
+
+	/* done, not waiting anymore, the WRQ bit if any, will be dropped by the
+	 * unlock
+	 */
+}
+
+
+__attribute__((unused,always_inline,no_instrument_function))
+static inline void pl_lorw_rdunlock(unsigned long *lock)
+{
+	pl_sub(lock, PLOCK_LORW_SHR_BASE);
+}
+
+__attribute__((unused,always_inline,no_instrument_function))
+static inline void pl_lorw_wrunlock(unsigned long *lock)
+{
+	pl_and(lock, ~(PLOCK_LORW_WRQ_MASK | PLOCK_LORW_EXC_MASK));
+}
+
+__attribute__((unused,always_inline,no_instrument_function))
+static inline void pl_lorw_unlock(unsigned long *lock)
+{
+	if (pl_deref_long(lock) & PLOCK_LORW_EXC_MASK)
+		pl_lorw_wrunlock(lock);
+	else
+		pl_lorw_rdunlock(lock);
+}
