@@ -46,7 +46,7 @@
 #include <string.h>
 #include <plock.h>
 
-#define MAXTHREADS	64
+#define MAXTHREADS	256
 #define NBHEADS		32
 
 /* string size for stored data : 12 is enough to store the largest ints */
