@@ -53,23 +53,34 @@
 
 /* This function waits for <lock> to release all bits covered by <mask>, and
  * enforces an exponential backoff using CPU pauses to limit the pollution to
- * the other threads' caches. The progression follows (2^N)-1, limited to 255
- * iterations, which is way sufficient even for very large numbers of threads.
- * The function slightly benefits from size optimization under gcc, but Clang
- * cannot do it, so it's not done here, as it doesn't make a big difference.
+ * the other threads' caches. The progression follows (1.5^N)-1, limited to
+ * 16384 iterations, which is way sufficient even for very large numbers of
+ * threads.
  */
 __attribute__((unused,noinline,no_instrument_function))
-static void pl_wait_unlock_long(const unsigned long *lock, const unsigned long mask)
+static unsigned long pl_wait_unlock_long(const unsigned long *lock, const unsigned long mask)
 {
-	unsigned char m = 0;
+	unsigned long ret;
+	unsigned int m = 0;
 
 	do {
-		unsigned char loops = m + 1;
-		m = (m << 1) + 1;
-		do {
+		unsigned int loops = m;
+
+		for (; loops-- >= 1; )
 			pl_cpu_relax();
-		} while (--loops);
-	} while (__builtin_expect(pl_deref_long(lock) & mask, 0));
+
+		ret = pl_deref_long(lock);
+		if (__builtin_expect(ret & mask, 0) == 0)
+			break;
+
+		/* the below produces an exponential growth with loops to lower
+		 * values and still growing. This allows competing threads to
+		 * wait different times once the threshold is reached.
+		 */
+		m = ((m + (m >> 1)) | 2) & 0x7fff;
+	} while (1);
+
+	return ret;
 }
 
 /* This function waits for <lock> to release all bits covered by <mask>, and
@@ -80,17 +91,29 @@ static void pl_wait_unlock_long(const unsigned long *lock, const unsigned long m
  * cannot do it, so it's not done here, as it doesn't make a big difference.
  */
 __attribute__((unused,noinline,no_instrument_function))
-static void pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask)
+static unsigned int pl_wait_unlock_int(const unsigned int *lock, const unsigned int mask)
 {
-	unsigned char m = 0;
+	unsigned int ret;
+	unsigned int m = 0;
 
 	do {
-		unsigned char loops = m + 1;
-		m = (m << 1) + 1;
-		do {
+		unsigned int loops = m;
+
+		for (; loops-- >= 1; )
 			pl_cpu_relax();
-		} while (--loops);
-	} while (__builtin_expect(pl_deref_int(lock) & mask, 0));
+
+		ret = pl_deref_long(lock);
+		if (__builtin_expect(ret & mask, 0) == 0)
+			break;
+
+		/* the below produces an exponential growth with loops to lower
+		 * values and still growing. This allows competing threads to
+		 * wait different times once the threshold is reached.
+		 */
+		m = ((m + (m >> 1)) | 2) & 0x7fff;
+	} while (1);
+
+	return ret;
 }
 
 /* This function waits for <lock> to change from value <prev> and returns the
