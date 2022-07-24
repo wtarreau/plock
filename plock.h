@@ -24,6 +24,9 @@
  */
 
 #include "atomic-ops.h"
+#ifdef _POSIX_PRIORITY_SCHEDULING
+#include <sched.h>
+#endif
 
 /* 64 bit */
 #define PLOCK64_RL_1   0x0000000000000004ULL
@@ -66,6 +69,12 @@ static unsigned long pl_wait_unlock_long(const unsigned long *lock, const unsign
 	do {
 		unsigned int loops = m;
 
+#ifdef _POSIX_PRIORITY_SCHEDULING
+		if (loops >= 16384) {
+			sched_yield();
+			loops -= 8192;
+		}
+#endif
 		for (; loops-- >= 1; )
 			pl_cpu_relax();
 
@@ -99,6 +108,12 @@ static unsigned int pl_wait_unlock_int(const unsigned int *lock, const unsigned 
 	do {
 		unsigned int loops = m;
 
+#ifdef _POSIX_PRIORITY_SCHEDULING
+		if (loops >= 16384) {
+			sched_yield();
+			loops -= 8192;
+		}
+#endif
 		for (; loops-- >= 1; )
 			pl_cpu_relax();
 
