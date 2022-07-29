@@ -70,13 +70,16 @@ static unsigned long pl_wait_unlock_long(const unsigned long *lock, const unsign
 		unsigned int loops = m;
 
 #ifdef _POSIX_PRIORITY_SCHEDULING
-		if (loops >= 16384) {
+		if (loops >= 65536) {
 			sched_yield();
-			loops -= 8192;
+			loops -= 32768;
 		}
 #endif
-		for (; loops-- >= 1; )
+		for (; loops >= 200; loops -= 10)
 			pl_cpu_relax();
+
+		for (; loops >= 1; loops--)
+			pl_barrier();
 
 		ret = pl_deref_long(lock);
 		if (__builtin_expect(ret & mask, 0) == 0)
@@ -86,7 +89,7 @@ static unsigned long pl_wait_unlock_long(const unsigned long *lock, const unsign
 		 * values and still growing. This allows competing threads to
 		 * wait different times once the threshold is reached.
 		 */
-		m = ((m + (m >> 1)) | 2) & 0x7fff;
+		m = ((m + (m >> 1)) + 2) & 0x3ffff;
 	} while (1);
 
 	return ret;
@@ -109,15 +112,18 @@ static unsigned int pl_wait_unlock_int(const unsigned int *lock, const unsigned 
 		unsigned int loops = m;
 
 #ifdef _POSIX_PRIORITY_SCHEDULING
-		if (loops >= 16384) {
+		if (loops >= 65536) {
 			sched_yield();
-			loops -= 8192;
+			loops -= 32768;
 		}
 #endif
-		for (; loops-- >= 1; )
+		for (; loops >= 200; loops -= 10)
 			pl_cpu_relax();
 
-		ret = pl_deref_long(lock);
+		for (; loops >= 1; loops--)
+			pl_barrier();
+
+		ret = pl_deref_int(lock);
 		if (__builtin_expect(ret & mask, 0) == 0)
 			break;
 
@@ -125,7 +131,7 @@ static unsigned int pl_wait_unlock_int(const unsigned int *lock, const unsigned 
 		 * values and still growing. This allows competing threads to
 		 * wait different times once the threshold is reached.
 		 */
-		m = ((m + (m >> 1)) | 2) & 0x7fff;
+		m = ((m + (m >> 1)) + 2) & 0x3ffff;
 	} while (1);
 
 	return ret;
