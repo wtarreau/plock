@@ -434,7 +434,7 @@
 	})                                                                    \
 )
 
-/* exchage value <x> with integer value pointed to by pointer <ptr>, and return
+/* exchange value <x> with integer value pointed to by pointer <ptr>, and return
  * previous <*ptr> value. <x> must be of the same size as <*ptr>.
  */
 #define pl_xchg(ptr, x) (                                                     \
@@ -524,9 +524,20 @@
 #else
 /* generic implementations */
 
+#if defined(__aarch64__)
+
+/* This was shown to improve fairness on modern ARMv8 such as Neoverse N1 */
+#define pl_cpu_relax() do {				\
+		asm volatile("isb" ::: "memory");	\
+	} while (0)
+
+#else
+
 #define pl_cpu_relax() do {             \
 		asm volatile("");       \
 	} while (0)
+
+#endif
 
 /* full memory barrier */
 #define pl_mb() do {                    \
