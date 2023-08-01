@@ -26,13 +26,19 @@
 #ifndef PL_ATOMIC_OPS_H
 #define PL_ATOMIC_OPS_H
 
+/*
+ * Architecture-specific versions of the various operations
+ */
 
-/* compiler-only memory barrier, for use around locks */
-#define pl_barrier() do {			\
-		asm volatile("" ::: "memory");	\
-	} while (0)
-
+/*
+ * ###### ix86 / x86_64 below ######
+ */
 #if defined(__i386__) || defined (__i486__) || defined (__i586__) || defined (__i686__) || defined (__x86_64__)
+
+/* CPU relaxation while waiting (PAUSE instruction on x86) */
+#define pl_cpu_relax() do {                   \
+		asm volatile("rep;nop\n");    \
+	} while (0)
 
 /* full memory barrier using mfence when SSE2 is supported, falling back to
  * "lock add %esp" (gcc uses "lock add" or "lock or").
@@ -56,14 +62,6 @@
 	} while (0)
 
 #endif /* end of pl_mb() case for sse2/x86_64/x86 */
-
-/*
- * Generic functions common to the x86 family
- */
-
-#define pl_cpu_relax() do {                   \
-		asm volatile("rep;nop\n");    \
-	} while (0)
 
 /* increment integer value pointed to by pointer <ptr>, and return non-zero if
  * result is non-null.
@@ -584,46 +582,102 @@
 	})                                                                    \
 )
 
-#else
-/* generic implementations */
-
-#if defined(__aarch64__)
+/*
+ * ##### ARM64 (aarch64) below #####
+ */
+#elif defined(__aarch64__)
 
 /* This was shown to improve fairness on modern ARMv8 such as Neoverse N1 */
 #define pl_cpu_relax() do {				\
 		asm volatile("isb" ::: "memory");	\
 	} while (0)
 
-#else
+#endif // end of arch-specific code
 
+
+/*
+ * Generic code using the __sync API for everything not defined above.
+ */
+
+
+/* CPU relaxation while waiting */
+#ifndef pl_cpu_relax
 #define pl_cpu_relax() do {             \
 		asm volatile("");       \
 	} while (0)
+#endif
 
+/* compiler-only memory barrier, for use around locks */
+#ifndef pl_barrier
+#define pl_barrier() do {			\
+		asm volatile("" ::: "memory");	\
+	} while (0)
 #endif
 
 /* full memory barrier */
+#ifndef pl_mb
 #define pl_mb() do {                    \
 		__sync_synchronize();   \
 	} while (0)
+#endif
 
+#ifndef pl_inc_noret
 #define pl_inc_noret(ptr)     do { __sync_add_and_fetch((ptr), 1); } while (0)
+#endif
+
+#ifndef pl_dec_noret
 #define pl_dec_noret(ptr)     do { __sync_sub_and_fetch((ptr), 1); } while (0)
+#endif
+
+#ifndef pl_inc
 #define pl_inc(ptr)           ({ __sync_add_and_fetch((ptr), 1);   })
+#endif
+
+#ifndef pl_dec
 #define pl_dec(ptr)           ({ __sync_sub_and_fetch((ptr), 1);   })
+#endif
+
+#ifndef pl_add
 #define pl_add(ptr, x)        ({ __sync_add_and_fetch((ptr), (x)); })
+#endif
+
+#ifndef pl_and
 #define pl_and(ptr, x)        ({ __sync_and_and_fetch((ptr), (x)); })
+#endif
+
+#ifndef pl_or
 #define pl_or(ptr, x)         ({ __sync_or_and_fetch((ptr), (x));  })
+#endif
+
+#ifndef pl_xor
 #define pl_xor(ptr, x)        ({ __sync_xor_and_fetch((ptr), (x)); })
+#endif
+
+#ifndef pl_sub
 #define pl_sub(ptr, x)        ({ __sync_sub_and_fetch((ptr), (x)); })
+#endif
+
+#ifndef pl_btr
 #define pl_btr(ptr, bit)      ({ typeof(*(ptr)) __pl_t = ((typeof(*(ptr)))1) << (bit); \
                                  __sync_fetch_and_and((ptr), ~__pl_t) & __pl_t;	\
                               })
+#endif
+
+#ifndef pl_bts
 #define pl_bts(ptr, bit)      ({ typeof(*(ptr)) __pl_t = ((typeof(*(ptr)))1) << (bit); \
                                  __sync_fetch_and_or((ptr), __pl_t) & __pl_t;	\
                               })
+#endif
+
+#ifndef pl_xadd
 #define pl_xadd(ptr, x)       ({ __sync_fetch_and_add((ptr), (x)); })
+#endif
+
+#ifndef pl_cmpxchg
 #define pl_cmpxchg(ptr, o, n) ({ __sync_val_compare_and_swap((ptr), (o), (n)); })
+#endif
+
+#ifndef pl_xchg
 #define pl_xchg(ptr, x)	({						\
 		typeof((ptr))  __pl_ptr = (ptr);			\
 		typeof((x))    __pl_x = (x);				\
