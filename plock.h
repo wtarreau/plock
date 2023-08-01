@@ -74,8 +74,12 @@
 		} while (_r & mask);              \
 		_r; /* return value */            \
 	})
-#else
+#else /* not PLOCK_DISABLE_EBO */
+# if defined(PLOCK_INLINE_EBO)
+__attribute__((unused,always_inline,no_instrument_function)) inline
+# else
 __attribute__((unused,noinline,no_instrument_function))
+# endif
 static unsigned long pl_wait_unlock_long(const unsigned long *lock, const unsigned long mask)
 {
 	unsigned long ret;
