@@ -63,6 +63,7 @@
 
 #endif /* end of pl_mb() case for sse2/x86_64/x86 */
 
+
 /* increment integer value pointed to by pointer <ptr>, and return non-zero if
  * result is non-null.
  */
@@ -593,6 +594,115 @@
 	} while (0)
 
 #endif // end of arch-specific code
+
+
+/*
+ * Generic code using the C11 __atomic API for functions not defined above.
+ * These are usable from gcc-4.7 and clang. We'll simply rely on the macros
+ * defining the memory orders to detect them. All operations are not
+ * necessarily defined, so some fallbacks to the default methods might still
+ * be necessary.
+ */
+
+
+#if defined(__ATOMIC_RELAXED) && defined(__ATOMIC_CONSUME) && defined(__ATOMIC_ACQUIRE) && \
+    defined(__ATOMIC_RELEASE) && defined(__ATOMIC_ACQ_REL) && defined(__ATOMIC_SEQ_CST)
+
+/* compiler-only memory barrier, for use around locks */
+#ifndef pl_barrier
+#define pl_barrier() __atomic_signal_fence(__ATOMIC_SEQ_CST)
+#endif
+
+/* full memory barrier */
+#ifndef pl_mb
+#define pl_mb() __atomic_thread_fence(__ATOMIC_SEQ_CST)
+#endif
+
+/* increment integer value pointed to by pointer <ptr>, and return non-zero if
+ * result is non-null.
+ */
+#ifndef pl_inc
+#define pl_inc(ptr) (__atomic_add_fetch((ptr), 1, __ATOMIC_SEQ_CST) != 0)
+#endif
+
+/* decrement integer value pointed to by pointer <ptr>, and return non-zero if
+ * result is non-null.
+ */
+#ifndef pl_dec
+#define pl_dec(ptr) (__atomic_sub_fetch((ptr), 1, __ATOMIC_SEQ_CST) != 0)
+#endif
+
+/* increment integer value pointed to by pointer <ptr>, no return */
+#ifndef pl_inc_noret
+#define pl_inc_noret(ptr) ((void)__atomic_add_fetch((ptr), 1, __ATOMIC_SEQ_CST))
+#endif
+
+/* decrement integer value pointed to by pointer <ptr>, no return */
+#ifndef pl_dec_noret
+#define pl_dec_noret(ptr) ((void)__atomic_sub_fetch((ptr), 1, __ATOMIC_SEQ_CST))
+#endif
+
+/* add integer constant <x> to integer value pointed to by pointer <ptr>,
+ * no return. Size of <x> is not checked.
+ */
+#ifndef pl_add
+#define pl_add(ptr, x) ((void)__atomic_add_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+/* subtract integer constant <x> from integer value pointed to by pointer
+ * <ptr>, no return. Size of <x> is not checked.
+ */
+#ifndef pl_sub
+#define pl_sub(ptr, x) ((void)__atomic_sub_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+/* binary and integer value pointed to by pointer <ptr> with constant <x>, no
+ * return. Size of <x> is not checked.
+ */
+#ifndef pl_and
+#define pl_and(ptr, x) ((void)__atomic_and_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+/* binary or integer value pointed to by pointer <ptr> with constant <x>, no
+ * return. Size of <x> is not checked.
+ */
+#ifndef pl_or
+#define pl_or(ptr, x) ((void)__atomic_or_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+/* binary xor integer value pointed to by pointer <ptr> with constant <x>, no
+ * return. Size of <x> is not checked.
+ */
+#ifndef pl_xor
+#define pl_xor(ptr, x) ((void)__atomic_xor_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+/* fetch-and-add: fetch integer value pointed to by pointer <ptr>, add <x> to
+ * to <*ptr> and return the previous value.
+ */
+#ifndef pl_xadd
+#define pl_xadd(ptr, x) (__atomic_fetch_add((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+/* exchange value <x> with integer value pointed to by pointer <ptr>, and return
+ * previous <*ptr> value. <x> must be of the same size as <*ptr>.
+ */
+#ifndef pl_xchg
+#define pl_xchg(ptr, x) (__atomic_exchange_n((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+/* compare integer value <*ptr> with <old> and exchange it with <new> if
+ * it matches, and return <old>. <old> and <new> must be of the same size as
+ * <*ptr>.
+ */
+#ifndef pl_cmpxchg
+#define pl_cmpxchg(ptr, old, new) ({					\
+	typeof(*ptr) __old = (old);					\
+	__atomic_compare_exchange_n((ptr), &__old, (new), 0, __ATOMIC_SEQ_CST, __ATOMIC_RELAXED); \
+	__old; })
+#endif
+
+#endif /* end of C11 atomics */
 
 
 /*
