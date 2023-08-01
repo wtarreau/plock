@@ -578,24 +578,16 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
  */
 #define pl_try_rtos(lock) (                                                                    \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long __pl_r = pl_deref_long(lock);                           \
-		pl_barrier();                                                                  \
-		if (!__builtin_expect(__pl_r & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) {        \
-			__pl_r = pl_xadd((lock), PLOCK64_SL_1) &                               \
-			      (PLOCK64_WL_ANY | PLOCK64_SL_ANY);                               \
-			if (__builtin_expect(__pl_r, 0))                                       \
-				pl_sub((lock), PLOCK64_SL_1);                                  \
-		}                                                                              \
+		register unsigned long __pl_r;                                                 \
+		__pl_r = pl_xadd((lock), PLOCK64_SL_1) & (PLOCK64_WL_ANY | PLOCK64_SL_ANY);    \
+		if (__builtin_expect(__pl_r, 0))                                               \
+			pl_sub((lock), PLOCK64_SL_1);                                          \
 		!__pl_r; /* return value */                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int __pl_r = pl_deref_int(lock);                             \
-		pl_barrier();                                                                  \
-		if (!__builtin_expect(__pl_r & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) {        \
-			__pl_r = pl_xadd((lock), PLOCK32_SL_1) &                               \
-			      (PLOCK32_WL_ANY | PLOCK32_SL_ANY);                               \
-			if (__builtin_expect(__pl_r, 0))                                       \
-				pl_sub((lock), PLOCK32_SL_1);                                  \
-		}                                                                              \
+		register unsigned int __pl_r;                                                  \
+		__pl_r = pl_xadd((lock), PLOCK32_SL_1) & (PLOCK32_WL_ANY | PLOCK32_SL_ANY);    \
+		if (__builtin_expect(__pl_r, 0))                                               \
+			pl_sub((lock), PLOCK32_SL_1);                                          \
 		!__pl_r; /* return value */                                                    \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_try_rtos__(char *,int);                \
