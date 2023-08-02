@@ -102,8 +102,10 @@ struct cache_item {
 /* the locks used by the cache */
 struct cache_lock {
 	unsigned long plock;
+#if defined(__SIZEOF_PTHREAD_RWLOCK_T)
 	pthread_spinlock_t spinlock;
 	pthread_rwlock_t rwlock;
+#endif
 	char pad[0] __attribute__((aligned(64)));
 };
 
@@ -281,6 +283,7 @@ void loop_mode0(void)
 	}
 }
 
+#if defined(__SIZEOF_PTHREAD_RWLOCK_T)
 /* read: pthread_rwlock_spinlock for everything */
 void loop_mode1(void)
 {
@@ -325,7 +328,9 @@ void loop_mode1(void)
 		thread_total_work++;
 	}
 }
+#endif
 
+#if defined(__SIZEOF_PTHREAD_RWLOCK_T)
 /* read: pthread_rwlock_rdlock, delete+insert: pthread_rwlock_wrlock */
 void loop_mode2(void)
 {
@@ -370,6 +375,7 @@ void loop_mode2(void)
 		thread_total_work++;
 	}
 }
+#endif
 
 /* read+delete+insert: W */
 void loop_mode3(void)
@@ -817,8 +823,10 @@ void oneatwork(int thr)
 	/* step 2 : running */
 	switch(arg_mode) {
 	case 0: loop_mode0(); break;
+#if defined(__SIZEOF_PTHREAD_RWLOCK_T)
 	case 1: loop_mode1(); break;
 	case 2: loop_mode2(); break;
+#endif
 	case 3: loop_mode3(); break;
 	case 4: loop_mode4(); break;
 	case 5: loop_mode5(); break;
@@ -847,8 +855,10 @@ void usage(int ret)
 	printf("usage: lrubench [-h] [-n nice] [-t threads] [-s size] [-k key_space] [-c miss_cost] [-m mode]\n"
 	       "Modes :\n"
 	       "  0 : no lock (only with -t 1)\n"
+#if defined(__SIZEOF_PTHREAD_RWLOCK_T)
 	       "  1 : pthread spinlock lock for everything\n"
 	       "  2 : pthread rwlock : R lock for lookup, W for insertion\n"
+#endif
 	       "  3 : plock W lock for everything\n"
 	       "  4 : plock S lock for everything\n"
 	       "  5 : plock R lock for lookup, W for insertion\n"
@@ -922,8 +932,10 @@ int main(int argc, char **argv)
 	setbuf(stdout, NULL);
 
 	cache_lock.plock = 0;
+#if defined(__SIZEOF_PTHREAD_RWLOCK_T)
 	pthread_spin_init(&cache_lock.spinlock, PTHREAD_PROCESS_PRIVATE);
 	pthread_rwlock_init(&cache_lock.rwlock, NULL);
+#endif
 
 	cache_root.used = 0;
 	for (u = 0; u < NBHEADS; u++) {
