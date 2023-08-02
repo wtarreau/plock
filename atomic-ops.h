@@ -990,4 +990,33 @@
 	})
 #endif
 
+/* certain _noret operations may be defined from the regular ones */
+#if !defined(pl_inc_noret) && defined(pl_inc)
+# define pl_inc_noret(ptr) (void)pl_inc(ptr)
+#endif
+
+#if !defined(pl_dec_noret) && defined(pl_dec)
+# define pl_dec_noret(ptr) (void)pl_dec(ptr)
+#endif
+
+#if !defined(pl_add_noret) && defined(pl_add)
+# define pl_add_noret(ptr, x) (void)pl_add(ptr, x)
+#endif
+
+#if !defined(pl_sub_noret) && defined(pl_sub)
+# define pl_sub_noret(ptr, x) (void)pl_sub(ptr, x)
+#endif
+
+#if !defined(pl_or_noret) && defined(pl_or)
+# define pl_or_noret(ptr, x) (void)pl_or(ptr, x)
+#endif
+
+#if !defined(pl_and_noret) && defined(pl_and)
+# define pl_and_noret(ptr, x) (void)pl_and(ptr, x)
+#endif
+
+#if !defined(pl_xor_noret) && defined(pl_xor)
+# define pl_xor_noret(ptr, x) (void)pl_xor(ptr, x)
+#endif
+
 #endif /* PL_ATOMIC_OPS_H */
