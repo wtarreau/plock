@@ -74,6 +74,14 @@
 
 #endif /* end of pl_mb() case for sse2/x86_64/x86 */
 
+/* load/store barriers are nops on x86 */
+#define _pl_mb_load()       do { asm volatile("" ::: "memory"); } while (0)
+#define _pl_mb_store()      do { asm volatile("" ::: "memory"); } while (0)
+
+/* atomic full/load/store are also nops on x86 */
+#define _pl_mb_ato()        do { asm volatile("" ::: "memory"); } while (0)
+#define _pl_mb_ato_load()   do { asm volatile("" ::: "memory"); } while (0)
+#define _pl_mb_ato_store()  do { asm volatile("" ::: "memory"); } while (0)
 
 /* increment integer value pointed to by pointer <ptr>, and return non-zero if
  * result is non-null.
@@ -604,6 +612,16 @@
 		asm volatile("isb" ::: "memory");	\
 	} while (0)
 
+/* full/load/store barriers */
+#define _pl_mb()            do { asm volatile("dmb ish"   ::: "memory"); } while (0)
+#define _pl_mb_load()       do { asm volatile("dmb ishld" ::: "memory"); } while (0)
+#define _pl_mb_store()      do { asm volatile("dmb ishst" ::: "memory"); } while (0)
+
+/* atomic full/load/store */
+#define _pl_mb_ato()        do { asm volatile("dmb ish"   ::: "memory"); } while (0)
+#define _pl_mb_ato_load()   do { asm volatile("dmb ishld" ::: "memory"); } while (0)
+#define _pl_mb_ato_store()  do { asm volatile("dmb ishst" ::: "memory"); } while (0)
+
 #endif // end of arch-specific code
 
 
@@ -734,6 +752,26 @@
 # define pl_mb _pl_mb
 #endif
 
+#if !defined(pl_mb_load) && defined(_pl_mb_load)
+# define pl_mb_load _pl_mb_load
+#endif
+
+#if !defined(pl_mb_store) && defined(_pl_mb_store)
+# define pl_mb_store _pl_mb_store
+#endif
+
+#if !defined(pl_mb_ato) && defined(_pl_mb_ato)
+# define pl_mb_ato _pl_mb_ato
+#endif
+
+#if !defined(pl_mb_ato_load) && defined(_pl_mb_ato_load)
+# define pl_mb_ato_load _pl_mb_ato_load
+#endif
+
+#if !defined(pl_mb_ato_store) && defined(_pl_mb_ato_store)
+# define pl_mb_ato_store _pl_mb_ato_store
+#endif
+
 #if !defined(pl_inc_noret) && defined(_pl_inc_noret)
 # define pl_inc_noret _pl_inc_noret
 #endif
@@ -815,6 +853,26 @@
 #define pl_mb() do {                    \
 		__sync_synchronize();   \
 	} while (0)
+#endif
+
+#ifndef pl_mb_load
+#define pl_mb_load() pl_mb()
+#endif
+
+#ifndef pl_mb_store
+#define pl_mb_store() pl_mb()
+#endif
+
+#ifndef pl_mb_ato
+#define pl_mb_ato() pl_mb()
+#endif
+
+#ifndef pl_mb_ato_load
+#define pl_mb_ato_load() pl_mb_ato()
+#endif
+
+#ifndef pl_mb_ato_store
+#define pl_mb_ato_store() pl_mb_ato()
 #endif
 
 #ifndef pl_inc_noret
