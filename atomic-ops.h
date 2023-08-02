@@ -816,20 +816,40 @@
 # define pl_add _pl_add
 #endif
 
+#if !defined(pl_add_noret) && defined(_pl_add_noret)
+# define pl_add_noret _pl_add_noret
+#endif
+
 #if !defined(pl_and) && defined(_pl_and)
 # define pl_and _pl_and
+#endif
+
+#if !defined(pl_and_noret) && defined(_pl_and_noret)
+# define pl_and_noret _pl_and_noret
 #endif
 
 #if !defined(pl_or) && defined(_pl_or)
 # define pl_or _pl_or
 #endif
 
+#if !defined(pl_or_noret) && defined(_pl_or_noret)
+# define pl_or_noret _pl_or_noret
+#endif
+
 #if !defined(pl_xor) && defined(_pl_xor)
 # define pl_xor _pl_xor
 #endif
 
+#if !defined(pl_xor_noret) && defined(_pl_xor_noret)
+# define pl_xor_noret _pl_xor_noret
+#endif
+
 #if !defined(pl_sub) && defined(_pl_sub)
 # define pl_sub _pl_sub
+#endif
+
+#if !defined(pl_sub_noret) && defined(_pl_sub_noret)
+# define pl_sub_noret _pl_sub_noret
 #endif
 
 #if !defined(pl_btr) && defined(_pl_btr)
