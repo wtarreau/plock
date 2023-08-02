@@ -26,6 +26,17 @@
 #ifndef PL_ATOMIC_OPS_H
 #define PL_ATOMIC_OPS_H
 
+/* The definitions below exist in two forms:
+ *   - fallback form (_pl_*)
+ *   - preferred form (pl_*)
+ *
+ * As a general rule, given that C11 atomics tend to offer more flexibility to
+ * the compiler, these should set the preferred form, and the arch-specific
+ * code should set the fallback code. But it's possible for arch-specific code
+ * to set a preferred form, in which case it will simply be used over the other
+ * ones.
+ */
+
 /*
  * Architecture-specific versions of the various operations
  */
@@ -45,19 +56,19 @@
  */
 #if defined(__SSE2__)
 
-#define pl_mb() do {                                 \
+#define _pl_mb() do {                                \
 		asm volatile("mfence" ::: "memory"); \
 	} while (0)
 
 #elif defined(__x86_64__)
 
-#define pl_mb() do {                                                       \
+#define _pl_mb() do {                                                      \
 		asm volatile("lock addl $0,0 (%%rsp)" ::: "memory", "cc"); \
 	} while (0)
 
 #else /* ix86 */
 
-#define pl_mb() do {                                                       \
+#define _pl_mb() do {                                                      \
 		asm volatile("lock addl $0,0 (%%esp)" ::: "memory", "cc"); \
 	} while (0)
 
@@ -67,7 +78,7 @@
 /* increment integer value pointed to by pointer <ptr>, and return non-zero if
  * result is non-null.
  */
-#define pl_inc(ptr) (                                                         \
+#define _pl_inc(ptr) (                                                        \
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned char ret;                                            \
 		asm volatile("lock incq %0\n"                                 \
@@ -112,7 +123,7 @@
 /* decrement integer value pointed to by pointer <ptr>, and return non-zero if
  * result is non-null.
  */
-#define pl_dec(ptr) (                                                         \
+#define _pl_dec(ptr) (                                                        \
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned char ret;                                            \
 		asm volatile("lock decq %0\n"                                 \
@@ -217,7 +228,7 @@
 /* add integer constant <x> to integer value pointed to by pointer <ptr>,
  * no return. Size of <x> is not checked.
  */
-#define pl_add(ptr, x) ({                                                     \
+#define _pl_add(ptr, x) ({                                                    \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock addq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
@@ -249,7 +260,7 @@
 /* subtract integer constant <x> from integer value pointed to by pointer
  * <ptr>, no return. Size of <x> is not checked.
  */
-#define pl_sub(ptr, x) ({                                                     \
+#define _pl_sub(ptr, x) ({                                                    \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock subq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
@@ -281,7 +292,7 @@
 /* binary and integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
-#define pl_and(ptr, x) ({                                                     \
+#define _pl_and(ptr, x) ({                                                    \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock andq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
@@ -313,7 +324,7 @@
 /* binary or integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
-#define pl_or(ptr, x) ({                                                      \
+#define _pl_or(ptr, x) ({                                                     \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock orq %1, %0\n"                              \
 			     : "+m" (*(ptr))                                  \
@@ -345,7 +356,7 @@
 /* binary xor integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
-#define pl_xor(ptr, x) ({                                                     \
+#define _pl_xor(ptr, x) ({                                                    \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock xorq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
@@ -416,7 +427,7 @@
  * 0 if the bit was not set, or ~0 of the same type as *ptr if it was set. Note
  * that there is no 8-bit equivalent operation.
  */
-#define pl_bts(ptr, bit) (                                                    \
+#define pl_bts(ptr, bit) (                                                   \
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned long ret;                                            \
 		asm volatile("lock btsq %2, %0\n\t"                           \
@@ -458,7 +469,7 @@
 /* fetch-and-add: fetch integer value pointed to by pointer <ptr>, add <x> to
  * to <*ptr> and return the previous value.
  */
-#define pl_xadd(ptr, x) (                                                     \
+#define _pl_xadd(ptr, x) (                                                    \
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned long ret = (unsigned long)(x);                       \
 		asm volatile("lock xaddq %0, %1\n"                            \
@@ -499,7 +510,7 @@
 /* exchange value <x> with integer value pointed to by pointer <ptr>, and return
  * previous <*ptr> value. <x> must be of the same size as <*ptr>.
  */
-#define pl_xchg(ptr, x) (                                                     \
+#define _pl_xchg(ptr, x) (                                                    \
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned long ret = (unsigned long)(x);                       \
 		asm volatile("xchgq %0, %1\n"                                 \
@@ -541,7 +552,7 @@
  * it matches, and return <old>. <old> and <new> must be of the same size as
  * <*ptr>.
  */
-#define pl_cmpxchg(ptr, old, new) (                                           \
+#define _pl_cmpxchg(ptr, old, new) (                                          \
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned long ret;                                            \
 		asm volatile("lock cmpxchgq %2,%1"                            \
@@ -703,6 +714,81 @@
 #endif
 
 #endif /* end of C11 atomics */
+
+
+/*
+ * Automatically remap to fallback code when available. This allows the arch
+ * specific code above to be used as an immediate fallback for missing C11
+ * definitions. Everything not defined will use the generic code at the end.
+ */
+
+#if !defined(pl_cpu_relax) && defined(_pl_cpu_relax)
+# define pl_cpu_relax _pl_cpu_relax
+#endif
+
+#if !defined(pl_barrier) && defined(_pl_barrier)
+# define pl_barrier _pl_barrier
+#endif
+
+#if !defined(pl_mb) && defined(_pl_mb)
+# define pl_mb _pl_mb
+#endif
+
+#if !defined(pl_inc_noret) && defined(_pl_inc_noret)
+# define pl_inc_noret _pl_inc_noret
+#endif
+
+#if !defined(pl_dec_noret) && defined(_pl_dec_noret)
+# define pl_dec_noret _pl_dec_noret
+#endif
+
+#if !defined(pl_inc) && defined(_pl_inc)
+# define pl_inc _pl_inc
+#endif
+
+#if !defined(pl_dec) && defined(_pl_dec)
+# define pl_dec _pl_dec
+#endif
+
+#if !defined(pl_add) && defined(_pl_add)
+# define pl_add _pl_add
+#endif
+
+#if !defined(pl_and) && defined(_pl_and)
+# define pl_and _pl_and
+#endif
+
+#if !defined(pl_or) && defined(_pl_or)
+# define pl_or _pl_or
+#endif
+
+#if !defined(pl_xor) && defined(_pl_xor)
+# define pl_xor _pl_xor
+#endif
+
+#if !defined(pl_sub) && defined(_pl_sub)
+# define pl_sub _pl_sub
+#endif
+
+#if !defined(pl_btr) && defined(_pl_btr)
+# define pl_btr _pl_btr
+#endif
+
+#if !defined(pl_bts) && defined(_pl_bts)
+# define pl_bts _pl_bts
+#endif
+
+#if !defined(pl_xadd) && defined(_pl_xadd)
+# define pl_xadd _pl_xadd
+#endif
+
+#if !defined(pl_cmpxchg) && defined(_pl_cmpxchg)
+# define pl_cmpxchg _pl_cmpxchg
+#endif
+
+#if !defined(pl_xchg) && defined(_pl_xchg)
+# define pl_xchg _pl_xchg
+#endif
 
 
 /*
