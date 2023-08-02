@@ -83,6 +83,12 @@
 #define _pl_mb_ato_load()   do { asm volatile("" ::: "memory"); } while (0)
 #define _pl_mb_ato_store()  do { asm volatile("" ::: "memory"); } while (0)
 
+/* atomic load: on x86 it's just a volatile read */
+#define _pl_load(ptr) ({ typeof(*(ptr)) __ptr = *(volatile typeof(ptr))ptr; __ptr; })
+
+/* atomic store: on x86 it's just a volatile write */
+#define _pl_store(ptr, x) do { *((volatile typeof(ptr))(ptr)) = (typeof(*ptr))(x); } while (0)
+
 /* increment integer value pointed to by pointer <ptr>, and return non-zero if
  * result is non-null.
  */
@@ -647,6 +653,16 @@
 #define pl_mb() __atomic_thread_fence(__ATOMIC_SEQ_CST)
 #endif
 
+/* atomic load */
+#ifndef pl_load
+#define pl_load(ptr) __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
+#endif
+
+/* atomic store */
+#ifndef pl_store
+#define pl_store(ptr, x) __atomic_store_n((ptr), (x), __ATOMIC_RELEASE)
+#endif
+
 /* increment integer value pointed to by pointer <ptr>, and return non-zero if
  * result is non-null.
  */
@@ -772,6 +788,14 @@
 # define pl_mb_ato_store _pl_mb_ato_store
 #endif
 
+#if !defined(pl_load) && defined(_pl_load)
+#define pl_load _pl_load
+#endif
+
+#if !defined(pl_store) && defined(_pl_store)
+#define pl_store _pl_store
+#endif
+
 #if !defined(pl_inc_noret) && defined(_pl_inc_noret)
 # define pl_inc_noret _pl_inc_noret
 #endif
@@ -873,6 +897,29 @@
 
 #ifndef pl_mb_ato_store
 #define pl_mb_ato_store() pl_mb_ato()
+#endif
+
+/* atomic load: volatile after a load barrier */
+#ifndef pl_load
+#define pl_load(ptr) ({							\
+		typeof(*(ptr)) __pl_ret = ({				\
+			pl_mb_load();					\
+			*(volatile typeof(ptr))ptr;			\
+		});							\
+		__pl_ret;						\
+	})
+#endif
+
+/* atomic store, old style using a CAS */
+#ifndef pl_store
+#define pl_store(ptr, x) do {						\
+		typeof((ptr))  __pl_ptr = (ptr);			\
+		typeof((x))    __pl_x = (x);				\
+		typeof(*(ptr)) __pl_old;				\
+		do {							\
+			__pl_old = *__pl_ptr;				\
+		} while (!__sync_bool_compare_and_swap(__pl_ptr, __pl_old, __pl_x)); \
+	} while (0)
 #endif
 
 #ifndef pl_inc_noret
