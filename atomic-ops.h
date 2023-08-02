@@ -691,35 +691,35 @@
  * no return. Size of <x> is not checked.
  */
 #ifndef pl_add
-#define pl_add(ptr, x) ((void)__atomic_add_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#define pl_add(ptr, x) (__atomic_add_fetch((ptr), (x), __ATOMIC_SEQ_CST))
 #endif
 
 /* subtract integer constant <x> from integer value pointed to by pointer
  * <ptr>, no return. Size of <x> is not checked.
  */
 #ifndef pl_sub
-#define pl_sub(ptr, x) ((void)__atomic_sub_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#define pl_sub(ptr, x) (__atomic_sub_fetch((ptr), (x), __ATOMIC_SEQ_CST))
 #endif
 
 /* binary and integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
 #ifndef pl_and
-#define pl_and(ptr, x) ((void)__atomic_and_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#define pl_and(ptr, x) (__atomic_and_fetch((ptr), (x), __ATOMIC_SEQ_CST))
 #endif
 
 /* binary or integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
 #ifndef pl_or
-#define pl_or(ptr, x) ((void)__atomic_or_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#define pl_or(ptr, x) (__atomic_or_fetch((ptr), (x), __ATOMIC_SEQ_CST))
 #endif
 
 /* binary xor integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
 #ifndef pl_xor
-#define pl_xor(ptr, x) ((void)__atomic_xor_fetch((ptr), (x), __ATOMIC_SEQ_CST))
+#define pl_xor(ptr, x) (__atomic_xor_fetch((ptr), (x), __ATOMIC_SEQ_CST))
 #endif
 
 /* fetch-and-add: fetch integer value pointed to by pointer <ptr>, add <x> to
