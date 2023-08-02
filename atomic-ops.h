@@ -156,7 +156,7 @@
 )
 
 /* increment integer value pointed to by pointer <ptr>, no return */
-#define pl_inc_noret(ptr) ({                                                  \
+#define pl_inc_noret(ptr) do {                                                \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock incq %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
@@ -183,10 +183,10 @@
 		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))     \
 			__unsupported_argument_size_for_pl_inc_noret__(__FILE__,__LINE__); \
 	}                                                                     \
-})
+} while (0)
 
 /* decrement integer value pointed to by pointer <ptr>, no return */
-#define pl_dec_noret(ptr) ({                                                  \
+#define pl_dec_noret(ptr) do {                                                \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock decq %0\n"                                 \
 			     : "+m" (*(ptr))                                  \
@@ -213,7 +213,7 @@
 		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))     \
 			__unsupported_argument_size_for_pl_dec_noret__(__FILE__,__LINE__); \
 	}                                                                     \
-})
+} while (0)
 
 /* add integer constant <x> to integer value pointed to by pointer <ptr>,
  * no return. Size of <x> is not checked.
@@ -569,8 +569,8 @@
 		__sync_synchronize();   \
 	} while (0)
 
-#define pl_inc_noret(ptr)     ({ __sync_add_and_fetch((ptr), 1);   })
-#define pl_dec_noret(ptr)     ({ __sync_sub_and_fetch((ptr), 1);   })
+#define pl_inc_noret(ptr)     do { __sync_add_and_fetch((ptr), 1); } while (0)
+#define pl_dec_noret(ptr)     do { __sync_sub_and_fetch((ptr), 1); } while (0)
 #define pl_inc(ptr)           ({ __sync_add_and_fetch((ptr), 1);   })
 #define pl_dec(ptr)           ({ __sync_sub_and_fetch((ptr), 1);   })
 #define pl_add(ptr, x)        ({ __sync_add_and_fetch((ptr), (x)); })
