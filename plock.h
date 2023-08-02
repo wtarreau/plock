@@ -234,7 +234,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		if (!__builtin_expect(__pl_r, 0)) {                                            \
 			__pl_r = pl_xadd((lock), PLOCK64_RL_1) & PLOCK64_WL_ANY;               \
 			if (__builtin_expect(__pl_r, 0))                                       \
-				pl_sub((lock), PLOCK64_RL_1);                                  \
+				pl_sub_noret((lock), PLOCK64_RL_1);                            \
 		}                                                                              \
 		!__pl_r; /* return value */                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
@@ -243,7 +243,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		if (!__builtin_expect(__pl_r, 0)) {                                            \
 			__pl_r = pl_xadd((lock), PLOCK32_RL_1) & PLOCK32_WL_ANY;               \
 			if (__builtin_expect(__pl_r, 0))                                       \
-				pl_sub((lock), PLOCK32_RL_1);                                  \
+				pl_sub_noret((lock), PLOCK32_RL_1);                            \
 		}                                                                              \
 		!__pl_r; /* return value */                                                    \
 	}) : ({                                                                                \
@@ -268,7 +268,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 				pl_wait_unlock_long(__lk_r, __msk_r);                          \
 			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
 				break;                                                         \
-			pl_sub(__lk_r, __set_r);                                               \
+			pl_sub_noret(__lk_r, __set_r);                                         \
 		}                                                                              \
 		pl_barrier();                                                                  \
 		0;                                                                             \
@@ -281,7 +281,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 				pl_wait_unlock_int(__lk_r, __msk_r);                           \
 			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
 				break;                                                         \
-			pl_sub(__lk_r, __set_r);                                               \
+			pl_sub_noret(__lk_r, __set_r);                                         \
 		}                                                                              \
 		pl_barrier();                                                                  \
 		0;                                                                             \
@@ -296,10 +296,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_r(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_RL_1);                                                    \
+		pl_sub_noret(lock, PLOCK64_RL_1);                                              \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_RL_1);                                                    \
+		pl_sub_noret(lock, PLOCK32_RL_1);                                              \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_r__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -316,7 +316,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd((lock), PLOCK64_SL_1 | PLOCK64_RL_1) &                \
 			      (PLOCK64_WL_ANY | PLOCK64_SL_ANY);                               \
 			if (__builtin_expect(__pl_r, 0))                                       \
-				pl_sub((lock), PLOCK64_SL_1 | PLOCK64_RL_1);                   \
+				pl_sub_noret((lock), PLOCK64_SL_1 | PLOCK64_RL_1);             \
 		}                                                                              \
 		!__pl_r; /* return value */                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
@@ -326,7 +326,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd((lock), PLOCK32_SL_1 | PLOCK32_RL_1) &                \
 			      (PLOCK32_WL_ANY | PLOCK32_SL_ANY);                               \
 			if (__builtin_expect(__pl_r, 0))                                       \
-				pl_sub((lock), PLOCK32_SL_1 | PLOCK32_RL_1);                   \
+				pl_sub_noret((lock), PLOCK32_SL_1 | PLOCK32_RL_1);             \
 		}                                                                              \
 		!__pl_r; /* return value */                                                    \
 	}) : ({                                                                                \
@@ -350,7 +350,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		while (1) {                                                                    \
 			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
 				break;                                                         \
-			pl_sub(__lk_r, __set_r);                                               \
+			pl_sub_noret(__lk_r, __set_r);                                         \
 			pl_wait_unlock_long(__lk_r, __msk_r);                                  \
 		}                                                                              \
 		pl_barrier();                                                                  \
@@ -362,7 +362,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		while (1) {                                                                    \
 			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
 				break;                                                         \
-			pl_sub(__lk_r, __set_r);                                               \
+			pl_sub_noret(__lk_r, __set_r);                                         \
 			pl_wait_unlock_int(__lk_r, __msk_r);                                   \
 		}                                                                              \
 		pl_barrier();                                                                  \
@@ -378,10 +378,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_s(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_SL_1 + PLOCK64_RL_1);                                     \
+		pl_sub_noret(lock, PLOCK64_SL_1 + PLOCK64_RL_1);                               \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_SL_1 + PLOCK32_RL_1);                                     \
+		pl_sub_noret(lock, PLOCK32_SL_1 + PLOCK32_RL_1);                               \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_s__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -393,10 +393,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_stor(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_SL_1);                                                    \
+		pl_sub_noret(lock, PLOCK64_SL_1);                                              \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_SL_1);                                                    \
+		pl_sub_noret(lock, PLOCK32_SL_1);                                              \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_stor__(char *,int);                    \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -427,10 +427,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_wtos(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_WL_1);                                                    \
+		pl_sub_noret(lock, PLOCK64_WL_1);                                              \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_WL_1);                                                    \
+		pl_sub_noret(lock, PLOCK32_WL_1);                                              \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_wtos__(char *,int);                    \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -442,10 +442,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_wtor(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_WL_1 | PLOCK64_SL_1);                                     \
+		pl_sub_noret(lock, PLOCK64_WL_1 | PLOCK64_SL_1);                               \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_WL_1 | PLOCK32_SL_1);                                     \
+		pl_sub_noret(lock, PLOCK32_WL_1 | PLOCK32_SL_1);                               \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_wtor__(char *,int);                    \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -476,7 +476,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd((lock), PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);  \
 			if (__builtin_expect(__pl_r & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) { \
 				/* a writer, seeker or atomic is present, let's leave */       \
-				pl_sub((lock), PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);    \
+				pl_sub_noret((lock), PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);\
 				__pl_r &= (PLOCK64_WL_ANY | PLOCK64_SL_ANY); /* return value */\
 			} else {                                                               \
 				/* wait for all other readers to leave */                      \
@@ -493,7 +493,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd((lock), PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);  \
 			if (__builtin_expect(__pl_r & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) { \
 				/* a writer, seeker or atomic is present, let's leave */       \
-				pl_sub((lock), PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);    \
+				pl_sub_noret((lock), PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);\
 				__pl_r &= (PLOCK32_WL_ANY | PLOCK32_SL_ANY); /* return value */\
 			} else {                                                               \
 				/* wait for all other readers to leave */                      \
@@ -524,7 +524,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
 			if (!__builtin_expect(__pl_r & __msk_r, 0))                            \
 				break;                                                         \
-			pl_sub(__lk_r, __set_r);                                               \
+			pl_sub_noret(__lk_r, __set_r);                                         \
 			__pl_r = pl_wait_unlock_long(__lk_r, __msk_r);                         \
 		}                                                                              \
 		/* wait for all other readers to leave */                                      \
@@ -541,7 +541,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
 			if (!__builtin_expect(__pl_r & __msk_r, 0))                            \
 				break;                                                         \
-			pl_sub(__lk_r, __set_r);                                               \
+			pl_sub_noret(__lk_r, __set_r);                                         \
 			__pl_r = pl_wait_unlock_int(__lk_r, __msk_r);                          \
 		}                                                                              \
 		/* wait for all other readers to leave */                                      \
@@ -560,10 +560,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_w(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);                      \
+		pl_sub_noret(lock, PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);                \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);                      \
+		pl_sub_noret(lock, PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);                \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_w__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -581,13 +581,13 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r;                                                 \
 		__pl_r = pl_xadd((lock), PLOCK64_SL_1) & (PLOCK64_WL_ANY | PLOCK64_SL_ANY);    \
 		if (__builtin_expect(__pl_r, 0))                                               \
-			pl_sub((lock), PLOCK64_SL_1);                                          \
+			pl_sub_noret((lock), PLOCK64_SL_1);                                    \
 		!__pl_r; /* return value */                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int __pl_r;                                                  \
 		__pl_r = pl_xadd((lock), PLOCK32_SL_1) & (PLOCK32_WL_ANY | PLOCK32_SL_ANY);    \
 		if (__builtin_expect(__pl_r, 0))                                               \
-			pl_sub((lock), PLOCK32_SL_1);                                          \
+			pl_sub_noret((lock), PLOCK32_SL_1);                                    \
 		!__pl_r; /* return value */                                                    \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_try_rtos__(char *,int);                \
@@ -670,7 +670,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd((lock), PLOCK64_WL_1);                                \
 			while (1) {                                                            \
 				if (__builtin_expect(__pl_r & PLOCK64_SL_ANY, 0)) {            \
-					pl_sub((lock), PLOCK64_WL_1);                          \
+					pl_sub_noret((lock), PLOCK64_WL_1);                    \
 					break;  /* return !__pl_r */                           \
 				}                                                              \
 				__pl_r &= PLOCK64_RL_ANY;                                      \
@@ -687,7 +687,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd((lock), PLOCK32_WL_1);                                \
 			while (1) {                                                            \
 				if (__builtin_expect(__pl_r & PLOCK32_SL_ANY, 0)) {            \
-					pl_sub((lock), PLOCK32_WL_1);                          \
+					pl_sub_noret((lock), PLOCK32_WL_1);                    \
 					break;  /* return !__pl_r */                           \
 				}                                                              \
 				__pl_r &= PLOCK32_RL_ANY;                                      \
@@ -717,7 +717,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		__pl_r = pl_xadd(__lk_r, __set_r);                                             \
 		while (__builtin_expect(__pl_r & PLOCK64_RL_ANY, 0)) {                         \
 			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
-				pl_sub(__lk_r, __set_r);                                       \
+				pl_sub_noret(__lk_r, __set_r);                                 \
 				pl_wait_unlock_long(__lk_r, __msk_r);                          \
 				__pl_r = pl_xadd(__lk_r, __set_r);                             \
 				continue;                                                      \
@@ -736,7 +736,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		__pl_r = pl_xadd(__lk_r, __set_r);                                             \
 		while (__builtin_expect(__pl_r & PLOCK32_RL_ANY, 0)) {                         \
 			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
-				pl_sub(__lk_r, __set_r);                                       \
+				pl_sub_noret(__lk_r, __set_r);                                 \
 				pl_wait_unlock_int(__lk_r, __msk_r);                           \
 				__pl_r = pl_xadd(__lk_r, __set_r);                             \
 				continue;                                                      \
@@ -758,10 +758,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_a(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_WL_1);                                                    \
+		pl_sub_noret(lock, PLOCK64_WL_1);                                              \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_WL_1);                                                    \
+		pl_sub_noret(lock, PLOCK32_WL_1);                                              \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_a__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -812,7 +812,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd((lock), PLOCK64_WL_1 - PLOCK64_RL_1);                 \
 			while (1) {                                                            \
 				if (__builtin_expect(__pl_r & PLOCK64_SL_ANY, 0)) {            \
-					pl_sub((lock), PLOCK64_WL_1 - PLOCK64_RL_1);           \
+					pl_sub_noret((lock), PLOCK64_WL_1 - PLOCK64_RL_1);     \
 					break;  /* return !__pl_r */                           \
 				}                                                              \
 				__pl_r &= PLOCK64_RL_ANY;                                      \
@@ -829,7 +829,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_xadd((lock), PLOCK32_WL_1 - PLOCK32_RL_1);                 \
 			while (1) {                                                            \
 				if (__builtin_expect(__pl_r & PLOCK32_SL_ANY, 0)) {            \
-					pl_sub((lock), PLOCK32_WL_1 - PLOCK32_RL_1);           \
+					pl_sub_noret((lock), PLOCK32_WL_1 - PLOCK32_RL_1);     \
 					break;  /* return !__pl_r */                           \
 				}                                                              \
 				__pl_r &= PLOCK32_RL_ANY;                                      \
@@ -898,13 +898,13 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __pl_r = pl_deref_long(__lk_r);                         \
 		if (!(__pl_r & PLOCK64_SL_ANY))                                                \
-			pl_or(__lk_r, PLOCK64_SL_1);                                           \
+			pl_or_noret(__lk_r, PLOCK64_SL_1);                                     \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __pl_r = pl_deref_int(__lk_r);                           \
 		if (!(__pl_r & PLOCK32_SL_ANY))                                                \
-			pl_or(__lk_r, PLOCK32_SL_1);                                           \
+			pl_or_noret(__lk_r, PLOCK32_SL_1);                                     \
 		pl_barrier();                                                                  \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_jtoc__(char *,int);                    \
@@ -922,7 +922,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		while (__builtin_expect(!(__pl_r & PLOCK64_SL_ANY), 0)) {                      \
 			unsigned char __loops;                                                 \
 			if (__pl_r / PLOCK64_WL_1 == (__pl_r & PLOCK64_RL_ANY) / PLOCK64_RL_1) { \
-				pl_or(__lk_r, PLOCK64_SL_1);                                   \
+				pl_or_noret(__lk_r, PLOCK64_SL_1);                             \
 				break;                                                         \
 			}                                                                      \
 			__loops = __m + 1;                                                     \
@@ -941,7 +941,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		while (__builtin_expect(!(__pl_r & PLOCK32_SL_ANY), 0)) {                      \
 			unsigned char __loops;                                                 \
 			if (__pl_r / PLOCK32_WL_1 == (__pl_r & PLOCK32_RL_ANY) / PLOCK32_RL_1) { \
-				pl_or(__lk_r, PLOCK32_SL_1);                                   \
+				pl_or_noret(__lk_r, PLOCK32_SL_1);                             \
 				break;                                                         \
 			}                                                                      \
 			__loops = __m + 1;                                                     \
@@ -967,14 +967,14 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __set_r = - PLOCK64_RL_1 - PLOCK64_WL_1;                \
 		register unsigned long __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;            \
 		if (!(__pl_r & PLOCK64_RL_ANY))                                                \
-			pl_and(__lk_r, ~PLOCK64_SL_1);                                         \
+			pl_and_noret(__lk_r, ~PLOCK64_SL_1);                                   \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = - PLOCK32_RL_1 - PLOCK32_WL_1;                 \
 		register unsigned int __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;             \
 		if (!(__pl_r & PLOCK32_RL_ANY))                                                \
-			pl_and(__lk_r, ~PLOCK32_SL_1);                                         \
+			pl_and_noret(__lk_r, ~PLOCK32_SL_1);                                   \
 		pl_barrier();                                                                  \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_c__(char *,int);                  \
@@ -990,7 +990,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r = pl_xadd(__lk_r, -PLOCK64_RL_1) - PLOCK64_RL_1; \
 		while (__pl_r & PLOCK64_SL_ANY) {                                              \
 			if (!(__pl_r & PLOCK64_RL_ANY)) {                                      \
-				pl_and(__lk_r, ~PLOCK64_SL_1);                                 \
+				pl_and_noret(__lk_r, ~PLOCK64_SL_1);                           \
 				break;                                                         \
 			}                                                                      \
 			pl_cpu_relax();                                                        \
@@ -1003,7 +1003,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __pl_r = pl_xadd(__lk_r, -PLOCK32_RL_1) - PLOCK32_RL_1;  \
 		while (__pl_r & PLOCK32_SL_ANY) {                                              \
 			if (!(__pl_r & PLOCK32_RL_ANY)) {                                      \
-				pl_and(__lk_r, ~PLOCK32_SL_1);                                 \
+				pl_and_noret(__lk_r, ~PLOCK32_SL_1);                           \
 				break;                                                         \
 			}                                                                      \
 			pl_cpu_relax();                                                        \
@@ -1022,10 +1022,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_atoj(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_add(lock, PLOCK64_RL_1);                                                    \
+		pl_add_noret(lock, PLOCK64_RL_1);                                              \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_add(lock, PLOCK32_RL_1);                                                    \
+		pl_add_noret(lock, PLOCK32_RL_1);                                              \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_atoj__(char *,int);                    \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -1074,7 +1074,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			unsigned char __loops;                                                 \
 			/* give up on other writers */                                         \
 			if (__builtin_expect(__pl_r & PLOCK64_WL_2PL, 0)) {                    \
-				pl_sub(__lk_r, __set_r);                                       \
+				pl_sub_noret(__lk_r, __set_r);                                 \
 				__pl_r = 0; /* failed to get the lock */                       \
 				break;                                                         \
 			}                                                                      \
@@ -1102,7 +1102,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			unsigned char __loops;                                                 \
 			/* but rollback on other writers */                                    \
 			if (__builtin_expect(__pl_r & PLOCK32_WL_2PL, 0)) {                    \
-				pl_sub(__lk_r, __set_r);                                       \
+				pl_sub_noret(__lk_r, __set_r);                                 \
 				__pl_r = 0; /* failed to get the lock */                       \
 				break;                                                         \
 			}                                                                      \
@@ -1149,7 +1149,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			unsigned char __loops;                                                 \
 			/* but rollback on other writers */                                    \
 			if (__builtin_expect(__pl_r & PLOCK64_WL_2PL, 0)) {                    \
-				pl_sub(__lk_r, __set_r);                                       \
+				pl_sub_noret(__lk_r, __set_r);                                 \
 				goto __retry;                                                  \
 			}                                                                      \
 			__loops = __m + 1;                                                     \
@@ -1178,7 +1178,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			unsigned char __loops;                                                 \
 			/* but rollback on other writers */                                    \
 			if (__builtin_expect(__pl_r & PLOCK32_WL_2PL, 0)) {                    \
-				pl_sub(__lk_r, __set_r);                                       \
+				pl_sub_noret(__lk_r, __set_r);                                 \
 				goto __retry;                                                  \
 			}                                                                      \
 			__loops = __m + 1;                                                     \
@@ -1203,10 +1203,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_j(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK64_WL_1 | PLOCK64_RL_1);                                     \
+		pl_sub_noret(lock, PLOCK64_WL_1 | PLOCK64_RL_1);                               \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub(lock, PLOCK32_WL_1 | PLOCK32_RL_1);                                     \
+		pl_sub_noret(lock, PLOCK32_WL_1 | PLOCK32_RL_1);                               \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_j__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -1331,7 +1331,7 @@ static inline void pl_lorw_wrlock(unsigned long *lock)
 			if (lk & PLOCK_LORW_SHR_MASK) {
 				/* note below, an OR is significantly cheaper than BTS or XADD */
 				if (!(lk & PLOCK_LORW_WRQ_MASK))
-					pl_or(lock, PLOCK_LORW_WRQ_BASE);
+					pl_or_noret(lock, PLOCK_LORW_WRQ_BASE);
 				lk = pl_wait_unlock_long(lock, PLOCK_LORW_SHR_MASK);
 			}
 
@@ -1356,13 +1356,13 @@ static inline void pl_lorw_wrlock(unsigned long *lock)
 __attribute__((unused,always_inline,no_instrument_function))
 static inline void pl_lorw_rdunlock(unsigned long *lock)
 {
-	pl_sub(lock, PLOCK_LORW_SHR_BASE);
+	pl_sub_noret(lock, PLOCK_LORW_SHR_BASE);
 }
 
 __attribute__((unused,always_inline,no_instrument_function))
 static inline void pl_lorw_wrunlock(unsigned long *lock)
 {
-	pl_and(lock, ~(PLOCK_LORW_WRQ_MASK | PLOCK_LORW_EXC_MASK));
+	pl_and_noret(lock, ~(PLOCK_LORW_WRQ_MASK | PLOCK_LORW_EXC_MASK));
 }
 
 __attribute__((unused,always_inline,no_instrument_function))
