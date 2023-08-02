@@ -242,7 +242,7 @@
 /* add integer constant <x> to integer value pointed to by pointer <ptr>,
  * no return. Size of <x> is not checked.
  */
-#define _pl_add(ptr, x) ({                                                    \
+#define _pl_add_noret(ptr, x) do {                                            \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock addq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
@@ -269,12 +269,12 @@
 		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))     \
 			__unsupported_argument_size_for_pl_add__(__FILE__,__LINE__);       \
 	}                                                                     \
-})
+} while (0)
 
 /* subtract integer constant <x> from integer value pointed to by pointer
  * <ptr>, no return. Size of <x> is not checked.
  */
-#define _pl_sub(ptr, x) ({                                                    \
+#define _pl_sub_noret(ptr, x) do {                                            \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock subq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
@@ -301,12 +301,12 @@
 		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8)) \
 			__unsupported_argument_size_for_pl_sub__(__FILE__,__LINE__);   \
 	}                                                                     \
-})
+} while (0)
 
 /* binary and integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
-#define _pl_and(ptr, x) ({                                                    \
+#define _pl_and_noret(ptr, x) do {                                            \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock andq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
@@ -333,12 +333,12 @@
 		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))  \
 			__unsupported_argument_size_for_pl_and__(__FILE__,__LINE__);    \
 	}                                                                     \
-})
+} while (0)
 
 /* binary or integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
-#define _pl_or(ptr, x) ({                                                     \
+#define _pl_or_noret(ptr, x) do {                                             \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock orq %1, %0\n"                              \
 			     : "+m" (*(ptr))                                  \
@@ -365,12 +365,12 @@
 		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))  \
 			__unsupported_argument_size_for_pl_or__(__FILE__,__LINE__);     \
 	}                                                                     \
-})
+} while (0)
 
 /* binary xor integer value pointed to by pointer <ptr> with constant <x>, no
  * return. Size of <x> is not checked.
  */
-#define _pl_xor(ptr, x) ({                                                    \
+#define _pl_xor_noret(ptr, x) do {                                            \
 	if (sizeof(long) == 8 && sizeof(*(ptr)) == 8) {                       \
 		asm volatile("lock xorq %1, %0\n"                             \
 			     : "+m" (*(ptr))                                  \
@@ -397,7 +397,7 @@
 		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))  \
 		__unsupported_argument_size_for_pl_xor__(__FILE__,__LINE__);            \
 	}                                                                     \
-})
+} while (0)
 
 /* test and reset bit <bit> in integer value pointed to by pointer <ptr>. Returns
  * 0 if the bit was not set, or ~0 of the same type as *ptr if it was set. Note
