@@ -583,12 +583,15 @@
                               })
 #define pl_xadd(ptr, x)       ({ __sync_fetch_and_add((ptr), (x)); })
 #define pl_cmpxchg(ptr, o, n) ({ __sync_val_compare_and_swap((ptr), (o), (n)); })
-#define pl_xchg(ptr, x)       ({ typeof(*(ptr)) __pl_t;                                       \
-                                 do { __pl_t = *(ptr);                                        \
-                                 } while (!__sync_bool_compare_and_swap((ptr), __pl_t, (x))); \
-                                 __pl_t;                                                      \
-                              })
-
+#define pl_xchg(ptr, x)	({						\
+		typeof((ptr))  __pl_ptr = (ptr);			\
+		typeof((x))    __pl_x = (x);				\
+		typeof(*(ptr)) __pl_old;				\
+		do {							\
+			__pl_old = *__pl_ptr;				\
+		} while (!__sync_bool_compare_and_swap(__pl_ptr, __pl_old, __pl_x)); \
+		__pl_old;						\
+	})
 #endif
 
 #endif /* PL_ATOMIC_OPS_H */
