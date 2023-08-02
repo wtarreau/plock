@@ -375,6 +375,44 @@
 	}                                                                     \
 })
 
+/* test and reset bit <bit> in integer value pointed to by pointer <ptr>. Returns
+ * 0 if the bit was not set, or ~0 of the same type as *ptr if it was set. Note
+ * that there is no 8-bit equivalent operation.
+ */
+#define pl_btr(ptr, bit) (                                                    \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned long ret;                                            \
+		asm volatile("lock btrq %2, %0\n\t"                           \
+			     "sbb %1, %1\n\t"                                 \
+			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     : "Ir" ((unsigned long)(bit))                    \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned int ret;                                             \
+		asm volatile("lock btrl %2, %0\n\t"                           \
+			     "sbb %1, %1\n\t"                                 \
+			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     : "Ir" ((unsigned int)(bit))                     \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned short ret;                                           \
+		asm volatile("lock btrw %2, %0\n\t"                           \
+			     "sbb %1, %1\n\t"                                 \
+			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     : "Ir" ((unsigned short)(bit))                   \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_btr__(char *,int);    \
+		if (sizeof(*(ptr)) != 1 && sizeof(*(ptr)) != 2 &&                      \
+		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8)) \
+			__unsupported_argument_size_for_pl_btr__(__FILE__,__LINE__);   \
+		0;                                                            \
+	})                                                                    \
+)
+
 /* test and set bit <bit> in integer value pointed to by pointer <ptr>. Returns
  * 0 if the bit was not set, or ~0 of the same type as *ptr if it was set. Note
  * that there is no 8-bit equivalent operation.
@@ -578,6 +616,9 @@
 #define pl_or(ptr, x)         ({ __sync_or_and_fetch((ptr), (x));  })
 #define pl_xor(ptr, x)        ({ __sync_xor_and_fetch((ptr), (x)); })
 #define pl_sub(ptr, x)        ({ __sync_sub_and_fetch((ptr), (x)); })
+#define pl_btr(ptr, bit)      ({ typeof(*(ptr)) __pl_t = ((typeof(*(ptr)))1) << (bit); \
+                                 __sync_fetch_and_and((ptr), ~__pl_t) & __pl_t;	\
+                              })
 #define pl_bts(ptr, bit)      ({ typeof(*(ptr)) __pl_t = ((typeof(*(ptr)))1) << (bit); \
                                  __sync_fetch_and_or((ptr), __pl_t) & __pl_t;	\
                               })
