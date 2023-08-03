@@ -232,7 +232,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r = pl_deref_long(lock) & PLOCK64_WL_ANY;          \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r, 0)) {                                            \
-			__pl_r = pl_xadd((lock), PLOCK64_RL_1) & PLOCK64_WL_ANY;               \
+			__pl_r = pl_ldadd_acq((lock), PLOCK64_RL_1) & PLOCK64_WL_ANY;          \
 			if (__builtin_expect(__pl_r, 0))                                       \
 				pl_sub_noret((lock), PLOCK64_RL_1);                            \
 		}                                                                              \
@@ -241,7 +241,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __pl_r = pl_deref_int(lock) & PLOCK32_WL_ANY;            \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r, 0)) {                                            \
-			__pl_r = pl_xadd((lock), PLOCK32_RL_1) & PLOCK32_WL_ANY;               \
+			__pl_r = pl_ldadd_acq((lock), PLOCK32_RL_1) & PLOCK32_WL_ANY;          \
 			if (__builtin_expect(__pl_r, 0))                                       \
 				pl_sub_noret((lock), PLOCK32_RL_1);                            \
 		}                                                                              \
@@ -266,7 +266,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		while (1) {                                                                    \
 			if (__builtin_expect(pl_deref_long(__lk_r) & __msk_r, 0))              \
 				pl_wait_unlock_long(__lk_r, __msk_r);                          \
-			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+			if (!__builtin_expect(pl_ldadd_acq(__lk_r, __set_r) & __msk_r, 0))     \
 				break;                                                         \
 			pl_sub_noret_lax(__lk_r, __set_r);                                     \
 		}                                                                              \
@@ -279,7 +279,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		while (1) {                                                                    \
 			if (__builtin_expect(pl_deref_int(__lk_r) & __msk_r, 0))               \
 				pl_wait_unlock_int(__lk_r, __msk_r);                           \
-			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+			if (!__builtin_expect(pl_ldadd_acq(__lk_r, __set_r) & __msk_r, 0))     \
 				break;                                                         \
 			pl_sub_noret_lax(__lk_r, __set_r);                                     \
 		}                                                                              \
@@ -313,7 +313,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r = pl_deref_long(lock);                           \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) {        \
-			__pl_r = pl_xadd((lock), PLOCK64_SL_1 | PLOCK64_RL_1) &                \
+			__pl_r = pl_ldadd_acq((lock), PLOCK64_SL_1 | PLOCK64_RL_1) &           \
 			      (PLOCK64_WL_ANY | PLOCK64_SL_ANY);                               \
 			if (__builtin_expect(__pl_r, 0))                                       \
 				pl_sub_noret_lax((lock), PLOCK64_SL_1 | PLOCK64_RL_1);         \
@@ -323,7 +323,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __pl_r = pl_deref_int(lock);                             \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) {        \
-			__pl_r = pl_xadd((lock), PLOCK32_SL_1 | PLOCK32_RL_1) &                \
+			__pl_r = pl_ldadd_acq((lock), PLOCK32_SL_1 | PLOCK32_RL_1) &           \
 			      (PLOCK32_WL_ANY | PLOCK32_SL_ANY);                               \
 			if (__builtin_expect(__pl_r, 0))                                       \
 				pl_sub_noret_lax((lock), PLOCK32_SL_1 | PLOCK32_RL_1);         \
@@ -348,7 +348,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __set_r = PLOCK64_SL_1 | PLOCK64_RL_1;                  \
 		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
 		while (1) {                                                                    \
-			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+			if (!__builtin_expect(pl_ldadd_acq(__lk_r, __set_r) & __msk_r, 0))     \
 				break;                                                         \
 			pl_sub_noret_lax(__lk_r, __set_r);                                     \
 			pl_wait_unlock_long(__lk_r, __msk_r);                                  \
@@ -360,7 +360,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __set_r = PLOCK32_SL_1 | PLOCK32_RL_1;                   \
 		register unsigned int __msk_r = PLOCK32_WL_ANY | PLOCK32_SL_ANY;               \
 		while (1) {                                                                    \
-			if (!__builtin_expect(pl_xadd(__lk_r, __set_r) & __msk_r, 0))          \
+			if (!__builtin_expect(pl_ldadd_acq(__lk_r, __set_r) & __msk_r, 0))     \
 				break;                                                         \
 			pl_sub_noret_lax(__lk_r, __set_r);                                     \
 			pl_wait_unlock_int(__lk_r, __msk_r);                                   \
@@ -407,12 +407,12 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 /* take the W lock under the S lock */
 #define pl_stow(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
-		register unsigned long __pl_r = pl_xadd((lock), PLOCK64_WL_1);                 \
+		register unsigned long __pl_r = pl_ldadd((lock), PLOCK64_WL_1);                \
 		while ((__pl_r & PLOCK64_RL_ANY) != PLOCK64_RL_1)                              \
 			__pl_r = pl_deref_long(lock);                                          \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
-		register unsigned int __pl_r = pl_xadd((lock), PLOCK32_WL_1);                  \
+		register unsigned int __pl_r = pl_ldadd((lock), PLOCK32_WL_1);                 \
 		while ((__pl_r & PLOCK32_RL_ANY) != PLOCK32_RL_1)                              \
 			__pl_r = pl_deref_int(lock);                                           \
 		pl_barrier();                                                                  \
@@ -473,7 +473,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r = pl_deref_long(lock);                           \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) {        \
-			__pl_r = pl_xadd((lock), PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);  \
+			__pl_r = pl_ldadd_acq((lock), PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);\
 			if (__builtin_expect(__pl_r & (PLOCK64_WL_ANY | PLOCK64_SL_ANY), 0)) { \
 				/* a writer, seeker or atomic is present, let's leave */       \
 				pl_sub_noret_lax((lock), PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);\
@@ -490,7 +490,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __pl_r = pl_deref_int(lock);                             \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) {        \
-			__pl_r = pl_xadd((lock), PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);  \
+			__pl_r = pl_ldadd_acq((lock), PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);\
 			if (__builtin_expect(__pl_r & (PLOCK32_WL_ANY | PLOCK32_SL_ANY), 0)) { \
 				/* a writer, seeker or atomic is present, let's leave */       \
 				pl_sub_noret_lax((lock), PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);\
@@ -521,7 +521,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __msk_r = PLOCK64_WL_ANY | PLOCK64_SL_ANY;              \
 		register unsigned long __pl_r;                                                 \
 		while (1) {                                                                    \
-			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			__pl_r = pl_ldadd_acq(__lk_r, __set_r);                                \
 			if (!__builtin_expect(__pl_r & __msk_r, 0))                            \
 				break;                                                         \
 			pl_sub_noret_lax(__lk_r, __set_r);                                     \
@@ -538,7 +538,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __msk_r = PLOCK32_WL_ANY | PLOCK32_SL_ANY;               \
 		register unsigned int __pl_r;                                                  \
 		while (1) {                                                                    \
-			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			__pl_r = pl_ldadd_acq(__lk_r, __set_r);                                \
 			if (!__builtin_expect(__pl_r & __msk_r, 0))                            \
 				break;                                                         \
 			pl_sub_noret_lax(__lk_r, __set_r);                                     \
@@ -579,13 +579,13 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_try_rtos(lock) (                                                                    \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		register unsigned long __pl_r;                                                 \
-		__pl_r = pl_xadd((lock), PLOCK64_SL_1) & (PLOCK64_WL_ANY | PLOCK64_SL_ANY);    \
+		__pl_r = pl_ldadd_acq((lock), PLOCK64_SL_1) & (PLOCK64_WL_ANY | PLOCK64_SL_ANY);\
 		if (__builtin_expect(__pl_r, 0))                                               \
 			pl_sub_noret_lax((lock), PLOCK64_SL_1);                                \
 		!__pl_r; /* return value */                                                    \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int __pl_r;                                                  \
-		__pl_r = pl_xadd((lock), PLOCK32_SL_1) & (PLOCK32_WL_ANY | PLOCK32_SL_ANY);    \
+		__pl_r = pl_ldadd_acq((lock), PLOCK32_SL_1) & (PLOCK32_WL_ANY | PLOCK32_SL_ANY);\
 		if (__builtin_expect(__pl_r, 0))                                               \
 			pl_sub_noret_lax((lock), PLOCK32_SL_1);                                \
 		!__pl_r; /* return value */                                                    \
@@ -612,9 +612,9 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r;                                                 \
 		pl_barrier();                                                                  \
 		while (1) {                                                                    \
-			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			__pl_r = pl_ldadd_acq(__lk_r, __set_r);                                \
 			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
-				if (pl_xadd(__lk_r, - __set_r))                                \
+				if (pl_ldadd_lax(__lk_r, - __set_r))                           \
 					break; /* the caller needs to drop the lock now */     \
 				continue;  /* lock was released, try again */                  \
 			}                                                                      \
@@ -632,9 +632,9 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __pl_r;                                                  \
 		pl_barrier();                                                                  \
 		while (1) {                                                                    \
-			__pl_r = pl_xadd(__lk_r, __set_r);                                     \
+			__pl_r = pl_ldadd_acq(__lk_r, __set_r);                                \
 			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
-				if (pl_xadd(__lk_r, - __set_r))                                \
+				if (pl_ldadd_lax(__lk_r, - __set_r))                           \
 					break; /* the caller needs to drop the lock now */     \
 				continue;  /* lock was released, try again */                  \
 			}                                                                      \
@@ -667,7 +667,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r = pl_deref_long(lock) & PLOCK64_SL_ANY;          \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r, 0)) {                                            \
-			__pl_r = pl_xadd((lock), PLOCK64_WL_1);                                \
+			__pl_r = pl_ldadd_acq((lock), PLOCK64_WL_1);                           \
 			while (1) {                                                            \
 				if (__builtin_expect(__pl_r & PLOCK64_SL_ANY, 0)) {            \
 					pl_sub_noret_lax((lock), PLOCK64_WL_1);                \
@@ -684,7 +684,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __pl_r = pl_deref_int(lock) & PLOCK32_SL_ANY;            \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r, 0)) {                                            \
-			__pl_r = pl_xadd((lock), PLOCK32_WL_1);                                \
+			__pl_r = pl_ldadd_acq((lock), PLOCK32_WL_1);                           \
 			while (1) {                                                            \
 				if (__builtin_expect(__pl_r & PLOCK32_SL_ANY, 0)) {            \
 					pl_sub_noret_lax((lock), PLOCK32_WL_1);                \
@@ -714,12 +714,12 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __set_r = PLOCK64_WL_1;                                 \
 		register unsigned long __msk_r = PLOCK64_SL_ANY;                               \
 		register unsigned long __pl_r;                                                 \
-		__pl_r = pl_xadd(__lk_r, __set_r);                                             \
+		__pl_r = pl_ldadd_acq(__lk_r, __set_r);                                        \
 		while (__builtin_expect(__pl_r & PLOCK64_RL_ANY, 0)) {                         \
 			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
 				pl_sub_noret_lax(__lk_r, __set_r);                             \
 				pl_wait_unlock_long(__lk_r, __msk_r);                          \
-				__pl_r = pl_xadd(__lk_r, __set_r);                             \
+				__pl_r = pl_ldadd_acq(__lk_r, __set_r);                        \
 				continue;                                                      \
 			}                                                                      \
 			/* wait for all readers to leave or upgrade */                         \
@@ -733,12 +733,12 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __set_r = PLOCK32_WL_1;                                  \
 		register unsigned int __msk_r = PLOCK32_SL_ANY;                                \
 		register unsigned int __pl_r;                                                  \
-		__pl_r = pl_xadd(__lk_r, __set_r);                                             \
+		__pl_r = pl_ldadd_acq(__lk_r, __set_r);                                        \
 		while (__builtin_expect(__pl_r & PLOCK32_RL_ANY, 0)) {                         \
 			if (__builtin_expect(__pl_r & __msk_r, 0)) {                           \
 				pl_sub_noret_lax(__lk_r, __set_r);                             \
 				pl_wait_unlock_int(__lk_r, __msk_r);                           \
-				__pl_r = pl_xadd(__lk_r, __set_r);                             \
+				__pl_r = pl_ldadd_acq(__lk_r, __set_r);                        \
 				continue;                                                      \
 			}                                                                      \
 			/* wait for all readers to leave or upgrade */                         \
@@ -775,7 +775,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_RL_1 - PLOCK64_WL_1;                  \
 		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
-		register unsigned long __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;            \
+		register unsigned long __pl_r = pl_ldadd(__lk_r, __set_r) + __set_r;           \
 		while (__builtin_expect(__pl_r & __msk_r, 0)) {                                \
 			__pl_r = pl_wait_unlock_long(__lk_r, __msk_r);                         \
 		}                                                                              \
@@ -784,7 +784,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_RL_1 - PLOCK32_WL_1;                   \
 		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
-		register unsigned int __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;             \
+		register unsigned int __pl_r = pl_ldadd(__lk_r, __set_r) + __set_r;            \
 		while (__builtin_expect(__pl_r & __msk_r, 0)) {                                \
 			__pl_r = pl_wait_unlock_int(__lk_r, __msk_r);                          \
 		}                                                                              \
@@ -809,7 +809,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r = pl_deref_long(lock) & PLOCK64_SL_ANY;          \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r, 0)) {                                            \
-			__pl_r = pl_xadd((lock), PLOCK64_WL_1 - PLOCK64_RL_1);                 \
+			__pl_r = pl_ldadd_acq((lock), PLOCK64_WL_1 - PLOCK64_RL_1);            \
 			while (1) {                                                            \
 				if (__builtin_expect(__pl_r & PLOCK64_SL_ANY, 0)) {            \
 					pl_sub_noret_lax((lock), PLOCK64_WL_1 - PLOCK64_RL_1); \
@@ -826,7 +826,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __pl_r = pl_deref_int(lock) & PLOCK32_SL_ANY;            \
 		pl_barrier();                                                                  \
 		if (!__builtin_expect(__pl_r, 0)) {                                            \
-			__pl_r = pl_xadd((lock), PLOCK32_WL_1 - PLOCK32_RL_1);                 \
+			__pl_r = pl_ldadd_acq((lock), PLOCK32_WL_1 - PLOCK32_RL_1);            \
 			while (1) {                                                            \
 				if (__builtin_expect(__pl_r & PLOCK32_SL_ANY, 0)) {            \
 					pl_sub_noret_lax((lock), PLOCK32_WL_1 - PLOCK32_RL_1); \
@@ -857,7 +857,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_rtoj(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
-		register unsigned long __pl_r = pl_xadd(__lk_r, PLOCK64_WL_1) + PLOCK64_WL_1;  \
+		register unsigned long __pl_r = pl_ldadd_acq(__lk_r, PLOCK64_WL_1) + PLOCK64_WL_1;\
 		register unsigned char __m = 0;                                                \
 		while (!(__pl_r & PLOCK64_SL_ANY) &&                                           \
 		       (__pl_r / PLOCK64_WL_1 != (__pl_r & PLOCK64_RL_ANY) / PLOCK64_RL_1)) {  \
@@ -872,7 +872,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
-		register unsigned int __pl_r = pl_xadd(__lk_r, PLOCK32_WL_1) + PLOCK32_WL_1;   \
+		register unsigned int __pl_r = pl_ldadd_acq(__lk_r, PLOCK32_WL_1) + PLOCK32_WL_1;\
 		register unsigned char __m = 0;                                                \
 		while (!(__pl_r & PLOCK32_SL_ANY) &&                                           \
 		       (__pl_r / PLOCK32_WL_1 != (__pl_r & PLOCK32_RL_ANY) / PLOCK32_RL_1)) {  \
@@ -917,7 +917,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_rtoc(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
-		register unsigned long __pl_r = pl_xadd(__lk_r, PLOCK64_WL_1) + PLOCK64_WL_1;  \
+		register unsigned long __pl_r = pl_ldadd_acq(__lk_r, PLOCK64_WL_1) + PLOCK64_WL_1;\
 		register unsigned char __m = 0;                                                \
 		while (__builtin_expect(!(__pl_r & PLOCK64_SL_ANY), 0)) {                      \
 			unsigned char __loops;                                                 \
@@ -936,7 +936,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
-		register unsigned int __pl_r = pl_xadd(__lk_r, PLOCK32_WL_1) + PLOCK32_WL_1;   \
+		register unsigned int __pl_r = pl_ldadd_acq(__lk_r, PLOCK32_WL_1) + PLOCK32_WL_1;\
 		register unsigned char __m = 0;                                                \
 		while (__builtin_expect(!(__pl_r & PLOCK32_SL_ANY), 0)) {                      \
 			unsigned char __loops;                                                 \
@@ -965,14 +965,14 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = - PLOCK64_RL_1 - PLOCK64_WL_1;                \
-		register unsigned long __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;            \
+		register unsigned long __pl_r = pl_ldadd(__lk_r, __set_r) + __set_r;           \
 		if (!(__pl_r & PLOCK64_RL_ANY))                                                \
 			pl_and_noret(__lk_r, ~PLOCK64_SL_1);                                   \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = - PLOCK32_RL_1 - PLOCK32_WL_1;                 \
-		register unsigned int __pl_r = pl_xadd(__lk_r, __set_r) + __set_r;             \
+		register unsigned int __pl_r = pl_ldadd(__lk_r, __set_r) + __set_r;            \
 		if (!(__pl_r & PLOCK32_RL_ANY))                                                \
 			pl_and_noret(__lk_r, ~PLOCK32_SL_1);                                   \
 		pl_barrier();                                                                  \
@@ -987,7 +987,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_ctoa(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
-		register unsigned long __pl_r = pl_xadd(__lk_r, -PLOCK64_RL_1) - PLOCK64_RL_1; \
+		register unsigned long __pl_r = pl_ldadd(__lk_r, -PLOCK64_RL_1) - PLOCK64_RL_1;\
 		while (__pl_r & PLOCK64_SL_ANY) {                                              \
 			if (!(__pl_r & PLOCK64_RL_ANY)) {                                      \
 				pl_and_noret(__lk_r, ~PLOCK64_SL_1);                           \
@@ -1000,7 +1000,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
-		register unsigned int __pl_r = pl_xadd(__lk_r, -PLOCK32_RL_1) - PLOCK32_RL_1;  \
+		register unsigned int __pl_r = pl_ldadd(__lk_r, -PLOCK32_RL_1) - PLOCK32_RL_1; \
 		while (__pl_r & PLOCK32_SL_ANY) {                                              \
 			if (!(__pl_r & PLOCK32_RL_ANY)) {                                      \
 				pl_and_noret(__lk_r, ~PLOCK32_SL_1);                           \
@@ -1067,7 +1067,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long __pl_r;                                                 \
 		register unsigned char __m;                                                    \
 		pl_wait_unlock_long(__lk_r, __msk_r);                                          \
-		__pl_r = pl_xadd(__lk_r, __set_r) + __set_r;                                   \
+		__pl_r = pl_ldadd_acq(__lk_r, __set_r) + __set_r;                              \
 		/* wait for all other readers to leave */                                      \
 		__m = 0;                                                                       \
 		while (__builtin_expect(__pl_r & PLOCK64_RL_2PL, 0)) {                         \
@@ -1095,7 +1095,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int __pl_r;                                                  \
 		register unsigned char __m;                                                    \
 		pl_wait_unlock_int(__lk_r, __msk_r);                                           \
-		__pl_r = pl_xadd(__lk_r, __set_r) + __set_r;                                   \
+		__pl_r = pl_ldadd_acq(__lk_r, __set_r) + __set_r;                              \
 		/* wait for all other readers to leave */                                      \
 		__m = 0;                                                                       \
 		while (__builtin_expect(__pl_r & PLOCK32_RL_2PL, 0)) {                         \
@@ -1142,7 +1142,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned char __m;                                                    \
 	__retry:                                                                               \
 		pl_wait_unlock_long(__lk_r, __msk_r);                                          \
-		__pl_r = pl_xadd(__lk_r, __set_r) + __set_r;                                   \
+		__pl_r = pl_ldadd_acq(__lk_r, __set_r) + __set_r;                              \
 		/* wait for all other readers to leave */                                      \
 		__m = 0;                                                                       \
 		while (__builtin_expect(__pl_r & PLOCK64_RL_2PL, 0)) {                         \
@@ -1171,7 +1171,7 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned char __m;                                                    \
 	__retry:                                                                               \
 		pl_wait_unlock_int(__lk_r, __msk_r);                                           \
-		__pl_r = pl_xadd(__lk_r, __set_r) + __set_r;                                   \
+		__pl_r = pl_ldadd_acq(__lk_r, __set_r) + __set_r;                              \
 		/* wait for all other readers to leave */                                      \
 		__m = 0;                                                                       \
 		while (__builtin_expect(__pl_r & PLOCK32_RL_2PL, 0)) {                         \
@@ -1299,7 +1299,7 @@ static inline void pl_lorw_rdlock(unsigned long *lock)
 		lk = pl_wait_unlock_long(lock, PLOCK_LORW_WRQ_MASK);
 
 	/* count us as visitor among others */
-	lk = pl_xadd(lock, PLOCK_LORW_SHR_BASE);
+	lk = pl_ldadd_acq(lock, PLOCK_LORW_SHR_BASE);
 
 	/* wait for end of exclusive access if any */
 	if (lk & PLOCK_LORW_EXC_MASK)
