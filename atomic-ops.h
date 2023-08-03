@@ -46,6 +46,23 @@
  */
 #if defined(__i386__) || defined (__i486__) || defined (__i586__) || defined (__i686__) || defined (__x86_64__)
 
+/* for compilers supporting condition flags on output, let's directly return them */
+#if defined(__GCC_ASM_FLAG_OUTPUTS__)
+#define X86_COND_C_TO_REG(reg)  ""
+#define X86_COND_Z_TO_REG(reg)  ""
+#define X86_COND_NZ_TO_REG(reg) ""
+#define X86_COND_C_RESULT(var)  "=@ccc"(var)
+#define X86_COND_Z_RESULT(var)  "=@ccz"(var)
+#define X86_COND_NZ_RESULT(var) "=@ccnz"(var)
+#else
+#define X86_COND_C_TO_REG(reg)  "sbb %" #reg ", %" #reg "\n\t"
+#define X86_COND_Z_TO_REG(reg)  "sete %" #reg "\n\t"
+#define X86_COND_NZ_TO_REG(reg) "setne %" #reg "\n\t"
+#define X86_COND_C_RESULT(var)  "=r"(var)
+#define X86_COND_Z_RESULT(var)  "=qm"(var)
+#define X86_COND_NZ_RESULT(var) "=qm"(var)
+#endif
+
 /* CPU relaxation while waiting (PAUSE instruction on x86) */
 #define pl_cpu_relax() do {                   \
 		asm volatile("rep;nop\n");    \
@@ -96,32 +113,32 @@
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned char ret;                                            \
 		asm volatile("lock incq %0\n"                                 \
-			     "setne %1\n"                                     \
-			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     X86_COND_NZ_TO_REG(1)                            \
+			     : "+m" (*(ptr)), X86_COND_NZ_RESULT(ret)         \
 			     :                                                \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned char ret;                                            \
 		asm volatile("lock incl %0\n"                                 \
-			     "setne %1\n"                                     \
-			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     X86_COND_NZ_TO_REG(1)                            \
+			     : "+m" (*(ptr)), X86_COND_NZ_RESULT(ret)         \
 			     :                                                \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned char ret;                                            \
 		asm volatile("lock incw %0\n"                                 \
-			     "setne %1\n"                                     \
-			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     X86_COND_NZ_TO_REG(1)                            \
+			     : "+m" (*(ptr)), X86_COND_NZ_RESULT(ret)         \
 			     :                                                \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
 		unsigned char ret;                                            \
 		asm volatile("lock incb %0\n"                                 \
-			     "setne %1\n"                                     \
-			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     X86_COND_NZ_TO_REG(1)                            \
+			     : "+m" (*(ptr)), X86_COND_NZ_RESULT(ret)         \
 			     :                                                \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
@@ -141,32 +158,32 @@
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned char ret;                                            \
 		asm volatile("lock decq %0\n"                                 \
-			     "setne %1\n"                                     \
-			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     X86_COND_NZ_TO_REG(1)                            \
+			     : "+m" (*(ptr)), X86_COND_NZ_RESULT(ret)         \
 			     :                                                \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned char ret;                                            \
 		asm volatile("lock decl %0\n"                                 \
-			     "setne %1\n"                                     \
-			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     X86_COND_NZ_TO_REG(1)                            \
+			     : "+m" (*(ptr)), X86_COND_NZ_RESULT(ret)         \
 			     :                                                \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned char ret;                                            \
 		asm volatile("lock decw %0\n"                                 \
-			     "setne %1\n"                                     \
-			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     X86_COND_NZ_TO_REG(1)                            \
+			     : "+m" (*(ptr)), X86_COND_NZ_RESULT(ret)         \
 			     :                                                \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
 		unsigned char ret;                                            \
 		asm volatile("lock decb %0\n"                                 \
-			     "setne %1\n"                                     \
-			     : "+m" (*(ptr)), "=qm" (ret)                     \
+			     X86_COND_NZ_TO_REG(1)                            \
+			     : "+m" (*(ptr)), X86_COND_NZ_RESULT(ret)         \
 			     :                                                \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
@@ -407,24 +424,24 @@
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned long ret;                                            \
 		asm volatile("lock btrq %2, %0\n\t"                           \
-			     "sbb %1, %1\n\t"                                 \
-			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     X86_COND_C_TO_REG(1)                             \
+			     : "+m" (*(ptr)), X86_COND_C_RESULT(ret)          \
 			     : "Ir" ((unsigned long)(bit))                    \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned int ret;                                             \
 		asm volatile("lock btrl %2, %0\n\t"                           \
-			     "sbb %1, %1\n\t"                                 \
-			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     X86_COND_C_TO_REG(1)                             \
+			     : "+m" (*(ptr)), X86_COND_C_RESULT(ret)          \
 			     : "Ir" ((unsigned int)(bit))                     \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned short ret;                                           \
 		asm volatile("lock btrw %2, %0\n\t"                           \
-			     "sbb %1, %1\n\t"                                 \
-			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     X86_COND_C_TO_REG(1)                             \
+			     : "+m" (*(ptr)), X86_COND_C_RESULT(ret)          \
 			     : "Ir" ((unsigned short)(bit))                   \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
@@ -445,24 +462,24 @@
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
 		unsigned long ret;                                            \
 		asm volatile("lock btsq %2, %0\n\t"                           \
-			     "sbb %1, %1\n\t"                                 \
-			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     X86_COND_C_TO_REG(1)                             \
+			     : "+m" (*(ptr)), X86_COND_C_RESULT(ret)          \
 			     : "Ir" ((unsigned long)(bit))                    \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
 		unsigned int ret;                                             \
 		asm volatile("lock btsl %2, %0\n\t"                           \
-			     "sbb %1, %1\n\t"                                 \
-			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     X86_COND_C_TO_REG(1)                             \
+			     : "+m" (*(ptr)), X86_COND_C_RESULT(ret)          \
 			     : "Ir" ((unsigned int)(bit))                     \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
 	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
 		unsigned short ret;                                           \
 		asm volatile("lock btsw %2, %0\n\t"                           \
-			     "sbb %1, %1\n\t"                                 \
-			     : "+m" (*(ptr)), "=r" (ret)                      \
+			     X86_COND_C_TO_REG(1)                             \
+			     : "+m" (*(ptr)), X86_COND_C_RESULT(ret)          \
 			     : "Ir" ((unsigned short)(bit))                   \
 			     : "cc");                                         \
 		ret; /* return value */                                       \
