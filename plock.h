@@ -408,13 +408,13 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_stow(lock) (                                                                        \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		register unsigned long __pl_r = pl_ldadd((lock), PLOCK64_WL_1);                \
-		while ((__pl_r & PLOCK64_RL_ANY) != PLOCK64_RL_1)                              \
-			__pl_r = pl_deref_long(lock);                                          \
+		if (__pl_r & (PLOCK64_RL_ANY & ~PLOCK64_RL_1))                                 \
+			__pl_r = pl_wait_unlock_long((const unsigned long*)lock, (PLOCK64_RL_ANY & ~PLOCK64_RL_1));  \
 		pl_barrier();                                                                  \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		register unsigned int __pl_r = pl_ldadd((lock), PLOCK32_WL_1);                 \
-		while ((__pl_r & PLOCK32_RL_ANY) != PLOCK32_RL_1)                              \
-			__pl_r = pl_deref_int(lock);                                           \
+		if (__pl_r & (PLOCK32_RL_ANY & ~PLOCK32_RL_1))                                 \
+			__pl_r = pl_wait_unlock_int((const unsigned int*)lock, (PLOCK32_RL_ANY & ~PLOCK32_RL_1)); \
 		pl_barrier();                                                                  \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_stow__(char *,int);                    \
@@ -528,8 +528,8 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_wait_unlock_long(__lk_r, __msk_r);                         \
 		}                                                                              \
 		/* wait for all other readers to leave */                                      \
-		while (__builtin_expect(__pl_r, 0))                                            \
-			__pl_r = pl_deref_long(__lk_r) - __set_r;                              \
+		if (__builtin_expect(__pl_r & (PLOCK64_RL_ANY & ~PLOCK64_RL_1), 0))            \
+			__pl_r = pl_wait_unlock_long(__lk_r, (PLOCK64_RL_ANY & ~PLOCK64_RL_1)) - __set_r;  \
 		pl_barrier();                                                                  \
 		0;                                                                             \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
@@ -545,8 +545,8 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 			__pl_r = pl_wait_unlock_int(__lk_r, __msk_r);                          \
 		}                                                                              \
 		/* wait for all other readers to leave */                                      \
-		while (__builtin_expect(__pl_r, 0))                                            \
-			__pl_r = pl_deref_int(__lk_r) - __set_r;                               \
+		if (__builtin_expect(__pl_r & (PLOCK32_RL_ANY & ~PLOCK32_RL_1), 0))            \
+			__pl_r = pl_wait_unlock_int(__lk_r, (PLOCK32_RL_ANY & ~PLOCK32_RL_1)) - __set_r;  \
 		pl_barrier();                                                                  \
 		0;                                                                             \
 	}) : ({                                                                                \
