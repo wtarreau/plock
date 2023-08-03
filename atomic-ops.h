@@ -499,6 +499,7 @@
 
 /* fetch-and-add: fetch integer value pointed to by pointer <ptr>, add <x> to
  * to <*ptr> and return the previous value.
+ * => THIS IS LEGACY, USE _pl_ldadd() INSTEAD.
  */
 #define _pl_xadd(ptr, x) (                                                    \
 	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
@@ -534,6 +535,88 @@
 		if (sizeof(*(ptr)) != 1 && sizeof(*(ptr)) != 2 &&                       \
 		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))  \
 			__unsupported_argument_size_for_pl_xadd__(__FILE__,__LINE__);   \
+		0;                                                            \
+	})                                                                    \
+)
+
+/* fetch-and-add: fetch integer value pointed to by pointer <ptr>, add <x> to
+ * to <*ptr> and return the previous value.
+ */
+#define _pl_ldadd(ptr, x) (                                                   \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned long ret = (unsigned long)(x);                       \
+		asm volatile("lock xaddq %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned int ret = (unsigned int)(x);                         \
+		asm volatile("lock xaddl %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned short ret = (unsigned short)(x);                     \
+		asm volatile("lock xaddw %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
+		unsigned char ret = (unsigned char)(x);                       \
+		asm volatile("lock xaddb %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_ldadd__(char *,int);  \
+		if (sizeof(*(ptr)) != 1 && sizeof(*(ptr)) != 2 &&                       \
+		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))  \
+			__unsupported_argument_size_for_pl_ldadd__(__FILE__,__LINE__);  \
+		0;                                                            \
+	})                                                                    \
+)
+
+/* fetch-and-sub: fetch integer value pointed to by pointer <ptr>, add -<x> to
+ * to <*ptr> and return the previous value.
+ */
+#define _pl_ldsub(ptr, x) (                                                   \
+	(sizeof(long) == 8 && sizeof(*(ptr)) == 8) ? ({                       \
+		unsigned long ret = (unsigned long)(-x);                      \
+		asm volatile("lock xaddq %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 4) ? ({                                       \
+		unsigned int ret = (unsigned int)(-x);                        \
+		asm volatile("lock xaddl %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 2) ? ({                                       \
+		unsigned short ret = (unsigned short)(-x);                    \
+		asm volatile("lock xaddw %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : (sizeof(*(ptr)) == 1) ? ({                                       \
+		unsigned char ret = (unsigned char)(-x);                      \
+		asm volatile("lock xaddb %0, %1\n"                            \
+			     :  "=r" (ret), "+m" (*(ptr))                     \
+			     : "0" (ret)                                      \
+			     : "cc");                                         \
+		ret; /* return value */                                       \
+	}) : ({                                                               \
+		void __unsupported_argument_size_for_pl_ldsub__(char *,int);  \
+		if (sizeof(*(ptr)) != 1 && sizeof(*(ptr)) != 2 &&                       \
+		    sizeof(*(ptr)) != 4 && (sizeof(long) != 8 || sizeof(*(ptr)) != 8))  \
+			__unsupported_argument_size_for_pl_ldsub__(__FILE__,__LINE__);  \
 		0;                                                            \
 	})                                                                    \
 )
@@ -741,6 +824,7 @@
 
 /* fetch-and-add: fetch integer value pointed to by pointer <ptr>, add <x> to
  * to <*ptr> and return the previous value.
+ * => THIS IS LEGACY, USE pl_ldadd() INSTEAD.
  */
 #ifndef pl_xadd
 #define pl_xadd(ptr, x) (__atomic_fetch_add((ptr), (x), __ATOMIC_SEQ_CST))
@@ -762,6 +846,29 @@
 	typeof(*ptr) __old = (old);					\
 	__atomic_compare_exchange_n((ptr), &__old, (new), 0, __ATOMIC_SEQ_CST, __ATOMIC_RELAXED); \
 	__old; })
+#endif
+
+/* fetch-and-add: fetch integer value pointed to by pointer <ptr>, add <x> to
+ * to <*ptr> and return the previous value.
+ */
+#ifndef pl_ldadd
+#define pl_ldadd(ptr, x)        (__atomic_fetch_add((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+#ifndef pl_ldand
+#define pl_ldand(ptr, x)        (__atomic_fetch_and((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+#ifndef pl_ldor
+#define pl_ldor(ptr, x)         (__atomic_fetch_or((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+#ifndef pl_ldxor
+#define pl_ldxor(ptr, x)        (__atomic_fetch_xor((ptr), (x), __ATOMIC_SEQ_CST))
+#endif
+
+#ifndef pl_ldsub
+#define pl_ldsub(ptr, x)        (__atomic_fetch_sub((ptr), (x), __ATOMIC_SEQ_CST))
 #endif
 
 #endif /* end of C11 atomics */
@@ -887,6 +994,26 @@
 
 #if !defined(pl_xchg) && defined(_pl_xchg)
 # define pl_xchg _pl_xchg
+#endif
+
+#if !defined(pl_ldadd) && defined(_pl_ldadd)
+# define pl_ldadd _pl_ldadd
+#endif
+
+#if !defined(pl_ldand) && defined(_pl_ldand)
+# define pl_ldand _pl_ldand
+#endif
+
+#if !defined(pl_ldor) && defined(_pl_ldor)
+# define pl_ldor _pl_ldor
+#endif
+
+#if !defined(pl_ldxor) && defined(_pl_ldxor)
+# define pl_ldxor _pl_ldxor
+#endif
+
+#if !defined(pl_ldsub) && defined(_pl_ldsub)
+# define pl_ldsub _pl_ldsub
 #endif
 
 
@@ -1025,6 +1152,26 @@
 		} while (!__sync_bool_compare_and_swap(__pl_ptr, __pl_old, __pl_x)); \
 		__pl_old;						\
 	})
+#endif
+
+#ifndef pl_ldadd
+#define pl_ldadd(ptr, x)        ({ __sync_fetch_and_add((ptr), (x)); })
+#endif
+
+#ifndef pl_ldand
+#define pl_ldand(ptr, x)        ({ __sync_fetch_and_and((ptr), (x)); })
+#endif
+
+#ifndef pl_ldor
+#define pl_ldor(ptr, x)         ({ __sync_fetch_and_or((ptr), (x));  })
+#endif
+
+#ifndef pl_ldxor
+#define pl_ldxor(ptr, x)        ({ __sync_fetch_and_xor((ptr), (x)); })
+#endif
+
+#ifndef pl_ldsub
+#define pl_ldsub(ptr, x)        ({ __sync_fetch_and_sub((ptr), (x)); })
 #endif
 
 /* certain _noret operations may be defined from the regular ones */
