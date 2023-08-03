@@ -296,10 +296,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_r(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK64_RL_1);                                              \
+		pl_sub_noret_rel(lock, PLOCK64_RL_1);                                          \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK32_RL_1);                                              \
+		pl_sub_noret_rel(lock, PLOCK32_RL_1);                                          \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_r__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -378,10 +378,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_s(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK64_SL_1 + PLOCK64_RL_1);                               \
+		pl_sub_noret_rel(lock, PLOCK64_SL_1 + PLOCK64_RL_1);                           \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK32_SL_1 + PLOCK32_RL_1);                               \
+		pl_sub_noret_rel(lock, PLOCK32_SL_1 + PLOCK32_RL_1);                           \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_s__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -560,10 +560,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_w(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);                \
+		pl_sub_noret_rel(lock, PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1);            \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);                \
+		pl_sub_noret_rel(lock, PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1);            \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_w__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -758,10 +758,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_a(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK64_WL_1);                                              \
+		pl_sub_noret_rel(lock, PLOCK64_WL_1);                                          \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK32_WL_1);                                              \
+		pl_sub_noret_rel(lock, PLOCK32_WL_1);                                          \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_a__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -1203,10 +1203,10 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 #define pl_drop_j(lock) (                                                                      \
 	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK64_WL_1 | PLOCK64_RL_1);                               \
+		pl_sub_noret_rel(lock, PLOCK64_WL_1 | PLOCK64_RL_1);                           \
 	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
 		pl_barrier();                                                                  \
-		pl_sub_noret(lock, PLOCK32_WL_1 | PLOCK32_RL_1);                               \
+		pl_sub_noret_rel(lock, PLOCK32_WL_1 | PLOCK32_RL_1);                           \
 	}) : ({                                                                                \
 		void __unsupported_argument_size_for_pl_drop_j__(char *,int);                  \
 		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
@@ -1356,13 +1356,13 @@ static inline void pl_lorw_wrlock(unsigned long *lock)
 __attribute__((unused,always_inline,no_instrument_function))
 static inline void pl_lorw_rdunlock(unsigned long *lock)
 {
-	pl_sub_noret(lock, PLOCK_LORW_SHR_BASE);
+	pl_sub_noret_rel(lock, PLOCK_LORW_SHR_BASE);
 }
 
 __attribute__((unused,always_inline,no_instrument_function))
 static inline void pl_lorw_wrunlock(unsigned long *lock)
 {
-	pl_and_noret(lock, ~(PLOCK_LORW_WRQ_MASK | PLOCK_LORW_EXC_MASK));
+	pl_and_noret_rel(lock, ~(PLOCK_LORW_WRQ_MASK | PLOCK_LORW_EXC_MASK));
 }
 
 __attribute__((unused,always_inline,no_instrument_function))
