@@ -263,12 +263,15 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
 		register unsigned long __set_r = PLOCK64_RL_1;                                 \
 		register unsigned long __msk_r = PLOCK64_WL_ANY;                               \
-		while (1) {                                                                    \
-			if (__builtin_expect(pl_deref_long(__lk_r) & __msk_r, 0))              \
-				pl_wait_unlock_long(__lk_r, __msk_r);                          \
-			if (!__builtin_expect(pl_ldadd_acq(__lk_r, __set_r) & __msk_r, 0))     \
-				break;                                                         \
-			pl_sub_noret_lax(__lk_r, __set_r);                                     \
+		register unsigned long __old_r = pl_cmpxchg(__lk_r, 0, __set_r);               \
+		if (__old_r) {                                                                 \
+			while (1) {                                                            \
+				if (__old_r & __msk_r)                                         \
+					pl_wait_unlock_long(__lk_r, __msk_r);                  \
+				if (!(pl_ldadd_acq(__lk_r, __set_r) & __msk_r))                \
+					break;                                                 \
+				__old_r = pl_sub_lax(__lk_r, __set_r);                         \
+			}                                                                      \
 		}                                                                              \
 		pl_barrier();                                                                  \
 		0;                                                                             \
@@ -276,12 +279,15 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
 		register unsigned int __set_r = PLOCK32_RL_1;                                  \
 		register unsigned int __msk_r = PLOCK32_WL_ANY;                                \
-		while (1) {                                                                    \
-			if (__builtin_expect(pl_deref_int(__lk_r) & __msk_r, 0))               \
-				pl_wait_unlock_int(__lk_r, __msk_r);                           \
-			if (!__builtin_expect(pl_ldadd_acq(__lk_r, __set_r) & __msk_r, 0))     \
-				break;                                                         \
-			pl_sub_noret_lax(__lk_r, __set_r);                                     \
+		register unsigned int __old_r = pl_cmpxchg(__lk_r, 0, __set_r);                \
+		if (__old_r) {                                                                 \
+			while (1) {                                                            \
+				if (__old_r & __msk_r)                                         \
+					pl_wait_unlock_int(__lk_r, __msk_r);                   \
+				if (!(pl_ldadd_acq(__lk_r, __set_r) & __msk_r))                \
+					break;                                                 \
+				__old_r = pl_sub_lax(__lk_r, __set_r);                         \
+			}                                                                      \
 		}                                                                              \
 		pl_barrier();                                                                  \
 		0;                                                                             \
