@@ -94,13 +94,13 @@ static unsigned long pl_wait_unlock_long(const unsigned long *lock, const unsign
 			loops -= 32768;
 		}
 #endif
-		for (; loops >= 200; loops -= 10)
+		for (; loops >= 60; loops --)
 			pl_cpu_relax();
 
 		for (; loops >= 1; loops--)
 			pl_barrier();
 
-		ret = pl_deref_long(lock);
+		ret = pl_load(lock);
 		if (__builtin_expect(ret & mask, 0) == 0)
 			break;
 
