@@ -1,1 +1,10 @@
-See doc/notes.txt. Some test programs are available in tests/.
+See doc/notes.txt. Some test programs are available in the tests/ directory.
+
+Design principles and performance measurements are detailed here:
+
+   http://wtarreau.blogspot.com/2018/02/progressive-locks-fast-upgradable.html
+
+Progressive locks are used, among others, by projects like HAProxy (https://www.haproxy.org/)
+and Intel's QAT Engine (https://github.com/intel/QAT_Engine/).
+
+A Golang implementation also exists (https://github.com/richardsamuels/go-plock).
