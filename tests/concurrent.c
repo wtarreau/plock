@@ -51,7 +51,7 @@ void oneatwork(void *arg)
 	}
 
 	/* step 1 : waiting for signal to start */
-	pl_inc(&actthreads);
+	pl_inc_noret(&actthreads);
 	while (step == 1);
 
 	/* step 2 : running */
@@ -60,7 +60,7 @@ void oneatwork(void *arg)
 			/* write */
 			l++;
 			//pl_cpu_relax();
-			pl_inc(&lock);// = 1;
+			pl_inc_noret(&lock);// = 1;
 			//pl_cpu_relax();
 		}
 		else {
@@ -74,7 +74,7 @@ void oneatwork(void *arg)
 	}
 
 	final_work[thr] = l;
-	pl_dec(&actthreads);
+	pl_dec_noret(&actthreads);
 	pthread_exit(0);
 }
 
@@ -132,15 +132,15 @@ int main(int argc, char **argv)
 		pthread_detach(thr[u]);
 	}
 
-	pl_inc(&step);  /* let the threads warm up and get ready to start */
+	pl_inc_noret(&step);  /* let the threads warm up and get ready to start */
 
 	while (actthreads != nbthreads);
 
 	gettimeofday(&start, NULL);
-	pl_inc(&step); /* fire ! */
+	pl_inc_noret(&step); /* fire ! */
 
 	sleep(2);
-	pl_inc(&step);
+	pl_inc_noret(&step);
 	gettimeofday(&stop, NULL);
 
 	while (actthreads)
