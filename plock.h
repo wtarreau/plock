@@ -536,6 +536,33 @@ static unsigned int pl_wait_new_int(const unsigned int *lock, const unsigned int
 	})                                                                                     \
 )
 
+/* Request instant write access (W), return non-zero on success, otherwise 0.
+ * We contrary to pl_try_w(), we don't want to wait for readers to leave, so
+ * we consider readers as conflicts as well. This is handy in situations that
+ * deal with non-urgent operations that must not waste CPU cycles waiting for
+ * readers to leave (e.g. cache purge etc).
+ */
+#define pl_try_w_nowait(lock) (                                                                \
+	(sizeof(long) == 8 && sizeof(*(lock)) == 8) ? ({                                       \
+		register unsigned long *__lk_r = (unsigned long *)(lock);                      \
+		register unsigned long __set_r = PLOCK64_WL_1 | PLOCK64_SL_1 | PLOCK64_RL_1;   \
+		register unsigned long __old_r = pl_cmpxchg(__lk_r, 0, __set_r);               \
+		pl_barrier();                                                                  \
+		!__old_r; /* return value */                                                   \
+	}) : (sizeof(*(lock)) == 4) ? ({                                                       \
+		register unsigned int *__lk_r = (unsigned int *)(lock);                        \
+		register unsigned int __set_r = PLOCK32_WL_1 | PLOCK32_SL_1 | PLOCK32_RL_1;    \
+		register unsigned int __old_r = pl_cmpxchg(__lk_r, 0, __set_r);                \
+		pl_barrier();                                                                  \
+		!__old_r; /* return value */                                                   \
+	}) : ({                                                                                \
+		void __unsupported_argument_size_for_pl_try_w_nowait__(char *,int);            \
+		if (sizeof(*(lock)) != 4 && (sizeof(long) != 8 || sizeof(*(lock)) != 8))       \
+			__unsupported_argument_size_for_pl_try_w_nowait__(__FILE__,__LINE__);  \
+		0;                                                                             \
+	})                                                                                     \
+)
+
 /* request a write access (W) and wait for it. The lock is immediately claimed,
  * and only upon failure an exponential backoff is used.
  */
